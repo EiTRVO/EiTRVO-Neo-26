@@ -222,7 +222,11 @@ dotnet publish "EiTRVO.UI\EiTRVO.UI.csproj" `
 - 字体版权归华为设备有限公司所有
 - 使用条件：突出显示使用声明、不得修改字体文件、不得单独重新分发字体、保留版权声明
 
-> ⚠️ 字体文件已通过 `.gitignore` 排除在版本控制之外。克隆仓库后需在https://developer.huawei.com/consumer/cn/doc/design-guides-V1/font-0000001157868583-V1自行获取字体文件并将HarmonyOS_Sans_SC_Regular.ttf改名为Font.ttf放置于 `EiTRVO.UI/font`。
+> ⚠️ 字体文件已通过 `.gitignore` 排除在版本控制之外。克隆仓库后需自行获取字体文件：
+> 
+> 1. 访问 [HarmonyOS Sans 字体下载页](https://developer.huawei.com/consumer/cn/doc/design-guides-V1/font-0000001157868583-V1)
+> 2. 将 `HarmonyOS_Sans_SC_Regular.ttf` 改名为 `Font.ttf`
+> 3. 放置于 `EiTRVO.UI/font/`
 
 ---
 
