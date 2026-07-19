@@ -295,9 +295,7 @@ public class LaunchOrchestrator
                 string agentPath = Path.Combine(_gameFolder.GameDir, "authlib-injector", "authlib-injector.jar");
                 if (File.Exists(agentPath))
                 {
-                    string mainClass = detail.MainClass ?? "net.minecraft.client.main.Main";
                     args.Insert(0, $"-javaagent:{agentPath}={yggdrasilServerUrl}");
-                    args.Add(mainClass);
                 }
             }
 
