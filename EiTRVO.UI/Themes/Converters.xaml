@@ -1,0 +1,11 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:Converters="clr-namespace:EiTRVO.UI.Converters">
+
+    <Converters:NotificationTypeToBrushConverter x:Key="NotificationTypeToBrushConverter"/>
+    <Converters:VersionTypeToBrushConverter x:Key="VersionTypeToBrushConverter"/>
+    <Converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    <Converters:BoolInvertConverter x:Key="BoolInvertConverter"/>
+    <Converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter"/>
+
+</ResourceDictionary>

@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.18362.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
+    <ApplicationIcon>icon\icon.ico</ApplicationIcon>
+    <AssemblyTitle>EiTRVO Neo 26</AssemblyTitle>
+    <Product>EiTRVO Neo</Product>
+    <Description>A launcher powered by EiTRVO ProEngine</Description>
+    <Copyright>© 2026 EiTRVO</Copyright>
+    <Version>26.0.1006.0</Version>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="EiTRVO.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="icon\icon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="font\Font.ttf">
+      <LogicalName>font/Font.ttf</LogicalName>
+    </Resource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Update="Themes\DarkTheme.xaml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Page>
+    <Page Update="Themes\Converters.xaml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Page>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EiTRVO.ProEngine\EiTRVO.ProEngine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.*" />
+    <PackageReference Include="System.Management" Version="8.0.*" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <!--
+    Fix for intermittent _wpftmp.csproj build errors:
+    WPF's MarkupCompilePass1 generates a temp project (*_wpftmp.csproj) in obj/.
+    On incremental builds, MSBuild may reference stale .g.cs files that haven't
+    been regenerated yet, causing CS2001 "source file not found" / BG1002 / MC1000.
+    This target wipes temp project artifacts before each markup compile pass.
+  -->
+  <Target Name="CleanWpfTempProject" BeforeTargets="MarkupCompilePass1">
+    <ItemGroup>
+      <_WpfTempFiles Include="$(IntermediateOutputPath)*_wpftmp*" />
+    </ItemGroup>
+    <Delete Files="@(_WpfTempFiles)" />
+  </Target>
+
+</Project>

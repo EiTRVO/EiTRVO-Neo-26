@@ -1,0 +1,392 @@
+<Window x:Class="EiTRVO.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:panels="clr-namespace:EiTRVO.UI.Panels"
+        Title="EiTRVO Neo" Height="760" Width="1280"
+        MinWidth="960" MinHeight="600"
+        Icon="icon/icon.ico"
+        FontFamily="{StaticResource CustomFont}"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBg}">
+
+    <Window.Resources>
+
+            <!-- Notification Toast (must stay here — uses code-behind Click handler) -->
+            <DataTemplate x:Key="NotificationTemplateLocal">
+                <Border Background="{DynamicResource Surface}" CornerRadius="12"
+                        Padding="12,8" Margin="0,0,0,6">
+                    <Border.Triggers>
+                        <EventTrigger RoutedEvent="Loaded">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                     From="0" To="1" Duration="0:0:0.25"/>
+                                    <ThicknessAnimation Storyboard.TargetProperty="Margin"
+                                                        From="0,-50,0,0" To="0,0,0,6"
+                                                        Duration="0:0:0.35">
+                                        <ThicknessAnimation.EasingFunction>
+                                            <CubicEase EasingMode="EaseOut"/>
+                                        </ThicknessAnimation.EasingFunction>
+                                    </ThicknessAnimation>
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                    </Border.Triggers>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Ellipse Grid.Column="0" Width="22" Height="22"
+                                 Fill="{Binding Type, Converter={StaticResource NotificationTypeToBrushConverter}}"
+                                 Margin="0,0,10,0"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Message}"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   FontSize="13" TextWrapping="Wrap"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="2" Content="✕"
+                                Background="Transparent"
+                                Foreground="{DynamicResource MutedText}"
+                                BorderThickness="0" FontWeight="Bold"
+                                Padding="4" Cursor="Hand"
+                                Click="CloseNotification_Click"
+                                Tag="{Binding Id}"/>
+                    </Grid>
+                </Border>
+            </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="2"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="2"/>
+            <ColumnDefinition Width="220"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ============================ -->
+        <!-- LEFT SIDEBAR                -->
+        <!-- ============================ -->
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBg}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- App Title -->
+                <Border Grid.Row="0" Padding="16,14,16,10"
+                        BorderBrush="{DynamicResource SidebarBorder}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel>
+                        <TextBlock Text="EiTRVO Neo" FontSize="17"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                        <TextBlock Text="{Binding AppVersionShort, RelativeSource={RelativeSource AncestorType=Window}}" FontSize="11"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   Margin="0,1,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Nav items -->
+                <StackPanel Grid.Row="1" Margin="6,8,6,6">
+
+                    <Button x:Name="sidebarHome" Tag="home"
+                            Style="{StaticResource SidebarNavButton}"
+                            Background="{DynamicResource MenuActiveBg}"
+                            Click="Sidebar_Click">
+                        <TextBlock Text="主页" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </Button>
+
+                    <Button x:Name="sidebarDownload" Tag="download"
+                            Style="{StaticResource SidebarNavButton}"
+                            Click="Sidebar_Click">
+                        <TextBlock Text="下载" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </Button>
+
+                    <Button x:Name="sidebarSettings" Tag="settings"
+                            Style="{StaticResource SidebarNavButton}"
+                            Click="Sidebar_Click">
+                        <TextBlock Text="设置" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </Button>
+
+                    <Button x:Name="sidebarManage" Tag="manage"
+                            Style="{StaticResource SidebarNavButton}"
+                            Click="Sidebar_Click">
+                        <TextBlock Text="管理" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </Button>
+
+                    <Button x:Name="sidebarAccount" Tag="account"
+                            Style="{StaticResource SidebarNavButton}"
+                            Click="Sidebar_Click">
+                        <TextBlock Text="账号" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </Button>
+
+                    <Button x:Name="sidebarAbout" Tag="about"
+                            Style="{StaticResource SidebarNavButton}"
+                            Click="Sidebar_Click">
+                        <TextBlock Text="关于" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </Button>
+
+                </StackPanel>
+
+                <!-- Bottom: theme toggle + version info -->
+                <Border Grid.Row="2" Padding="16,8"
+                        BorderBrush="{DynamicResource SidebarBorder}"
+                        BorderThickness="0,1,0,0">
+                    <StackPanel>
+                        <Button x:Name="btnThemeToggle"
+                                Content="深色模式"
+                                Style="{StaticResource CardBtn}"
+                                Height="26" FontSize="11"
+                                Click="BtnThemeToggle_Click"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- GridSplitter -->
+        <GridSplitter Grid.Column="1"/>
+
+        <!-- ============================ -->
+        <!-- CENTER CONTENT              -->
+        <!-- ============================ -->
+        <Border Grid.Column="2" Background="{DynamicResource WindowBg}"
+                ClipToBounds="True">
+            <Grid>
+
+            <!-- HOME panel -->
+            <panels:HomePanel x:Name="pnlHome" Visibility="Visible"/>
+
+            <!-- DOWNLOAD panel -->
+            <panels:DownloadPanel x:Name="pnlDownload" Visibility="Collapsed"/>
+
+            <!-- SETTINGS panel -->
+            <panels:SettingsPanel x:Name="pnlSettings" Visibility="Collapsed"/>
+
+            <!-- MANAGE panel -->
+            <panels:ManagePanel x:Name="pnlManage" Visibility="Collapsed"/>
+
+            <!-- INSTANCE DETAIL panel -->
+            <panels:InstanceDetailPanel x:Name="pnlInstanceDetail" Visibility="Collapsed"/>
+
+            <!-- MOD MANAGEMENT panel -->
+            <panels:ModManagementPanel x:Name="pnlModManagement" Visibility="Collapsed"/>
+
+            <!-- RESOURCE & SHADER PACKS panel -->
+            <panels:ResourcePacksPanel x:Name="pnlResourcePacks" Visibility="Collapsed"/>
+
+            <!-- SCHEMATIC MANAGEMENT panel -->
+            <panels:SchematicManagementPanel x:Name="pnlSchematicManagement" Visibility="Collapsed"/>
+
+            <!-- ACCOUNT panel -->
+            <panels:AccountPanel x:Name="pnlAccount" Visibility="Collapsed"/>
+
+            <!-- ABOUT panel -->
+            <panels:AboutPanel x:Name="pnlAbout" Visibility="Collapsed"/>
+
+            <!-- SAVE LOCK DETAIL panel -->
+            <panels:SaveLockDetailPanel x:Name="pnlSaveLockDetail" Visibility="Collapsed"/>
+
+            <!-- MODPACK DOWNLOAD panel -->
+            <panels:ModpackDownloadPanel x:Name="pnlModpackDownload" Visibility="Collapsed"/>
+
+            <!-- ACCOUNT SKIN panel -->
+            <panels:AccountSkinPanel x:Name="pnlAccountSkin" Visibility="Collapsed"/>
+
+            <!-- Download Progress Card — shared overlay, shown during downloads/imports -->
+            <Border x:Name="downloadCard"
+                    Visibility="Collapsed"
+                    Margin="24,4,24,12"
+                    Padding="16,14"
+                    Background="{DynamicResource CardBg}"
+                    CornerRadius="8"
+                    BorderBrush="{DynamicResource PanelBorder}"
+                    BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="280"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Row 0: Overall progress -->
+                    <TextBlock Grid.Row="0" Grid.Column="0"
+                               Text="总体进度" FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}"
+                               VerticalAlignment="Center"/>
+                    <ProgressBar Grid.Row="0" Grid.Column="1"
+                                 x:Name="downloadProgress"
+                                 Height="8"
+                                 VerticalAlignment="Center"
+                                 Margin="8,0,8,0"
+                                 Value="{Binding DownloadProgressValue}"
+                                 IsIndeterminate="{Binding IsProgressIndeterminate}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2"
+                               x:Name="lblProgressPercent"
+                               Text="{Binding ProgressText}" FontSize="12"
+                               Foreground="{DynamicResource TextSecondary}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding ProgressText}"/>
+
+                    <!-- Row 1: Per-file progress -->
+                    <TextBlock Grid.Row="1" Grid.Column="0"
+                               Text="当前文件" FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}"
+                               VerticalAlignment="Center"
+                               Margin="0,10,0,0"/>
+                    <ProgressBar Grid.Row="1" Grid.Column="1"
+                                 x:Name="fileProgress"
+                                 Height="8"
+                                 VerticalAlignment="Center"
+                                 Foreground="{DynamicResource AccentGreen}"
+                                 Margin="8,10,8,0"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2"
+                               x:Name="lblFileProgress"
+                               Text="{Binding CurrentFileProgress}" FontSize="11"
+                               Foreground="{DynamicResource TextSecondary}"
+                               VerticalAlignment="Center"
+                               Margin="0,10,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding CurrentFileProgress}"/>
+
+                    <!-- Row 2: Cancel button -->
+                    <Button Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+                            Content="取消下载"
+                            Style="{StaticResource CardBtn}"
+                            Foreground="{DynamicResource AccentRed}"
+                            Height="26" FontSize="12" Padding="12,1"
+                            Margin="0,10,0,0"
+                            HorizontalAlignment="Center"
+                            Command="{Binding CancelDownloadCommand}"/>
+                </Grid>
+            </Border>
+            </Grid>
+        </Border>
+
+        <!-- GridSplitter -->
+        <GridSplitter Grid.Column="3"/>
+
+        <!-- ============================ -->
+        <!-- RIGHT PANEL (LOG)           -->
+        <!-- ============================ -->
+        <Border Grid.Column="4" Background="{DynamicResource SidebarBg}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Border Grid.Row="0" Padding="14,10"
+                        BorderBrush="{DynamicResource SidebarBorder}"
+                        BorderThickness="0,0,0,1">
+                    <Grid>
+                        <TextBlock Text="运行日志" FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"/>
+                        <Button HorizontalAlignment="Right"
+                                Content="清空" FontSize="10"
+                                Foreground="{DynamicResource TextMuted}"
+                                Background="Transparent"
+                                BorderThickness="0" Cursor="Hand"
+                                Padding="6,2"
+                                Click="BtnClearLog_Click"/>
+            </Grid>
+        </Border>
+
+                <!-- Log list -->
+                <ItemsControl Grid.Row="1" x:Name="lstLog"
+                              ItemsSource="{Binding LogEntries}"
+                              ItemTemplate="{StaticResource LogEntryTemplate}"
+                              Margin="6,4,6,6"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                              VirtualizingStackPanel.IsVirtualizing="True"
+                              VirtualizingStackPanel.ScrollUnit="Pixel"
+                              Cursor="Hand"
+                              PreviewMouseLeftButtonDown="LogEntry_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- Failure dialog overlay -->
+        <Grid x:Name="pnlFailureDialog" Visibility="Collapsed" Panel.ZIndex="20"
+              Grid.ColumnSpan="5">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border x:Name="failureBackdrop" Background="#80000000"
+                    MouseLeftButtonDown="FailureDialogClose_Click"/>
+            <Border x:Name="failureDialog"
+                    Background="{DynamicResource Surface}"
+                    BorderBrush="{DynamicResource InputBorder}"
+                    BorderThickness="1" CornerRadius="10"
+                    Padding="24,20" MaxWidth="500"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Border.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 From="0" To="1" Duration="0:0:0.25"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Border.Triggers>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <Ellipse Width="28" Height="28" Fill="{DynamicResource ErrorBrush}"
+                                 Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="启动失败" FontSize="16" FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </StackPanel>
+                    <TextBlock x:Name="txtFailureReason" FontSize="13"
+                               Foreground="{DynamicResource TextSecondary}"
+                               TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <TextBlock x:Name="txtFailureLogPath" FontSize="11"
+                               Foreground="{DynamicResource TextMuted}"
+                               TextWrapping="Wrap" Margin="0,0,0,14"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="打开日志文件"
+                                Style="{StaticResource CardBtn}"
+                                Height="28" FontSize="12" Padding="10,3"
+                                Margin="0,0,8,0"
+                                Click="FailureDialogOpenLog_Click"/>
+                        <Button Content="确定"
+                                Style="{StaticResource PrimaryBtn}"
+                                Height="28" FontSize="12" Padding="14,3"
+                                Click="FailureDialogClose_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Notification toast overlay -->
+        <ItemsControl x:Name="notificationPanel"
+                      ItemsSource="{Binding Notifications}"
+                      ItemTemplate="{StaticResource NotificationTemplateLocal}"
+                      HorizontalAlignment="Center" MaxWidth="500"
+                      VerticalAlignment="Top" Margin="20,0,20,0"
+                      Panel.ZIndex="10"
+                      Grid.ColumnSpan="5"/>
+    </Grid>
+</Window>

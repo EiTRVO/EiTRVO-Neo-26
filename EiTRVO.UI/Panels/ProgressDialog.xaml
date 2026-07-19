@@ -1,0 +1,31 @@
+<Window x:Class="EiTRVO.UI.Panels.ProgressDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="处理中" Height="160" Width="420"
+        FontFamily="{StaticResource CustomFont}"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        WindowStyle="ToolWindow"
+        Background="{DynamicResource WindowBg}">
+
+    <StackPanel Margin="20">
+        <TextBlock x:Name="lblTitle" FontSize="14" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimary}"
+                   Margin="0,0,0,4" TextWrapping="Wrap"/>
+
+        <TextBlock x:Name="lblDetail" FontSize="12"
+                   Foreground="{DynamicResource TextMuted}"
+                   Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+        <ProgressBar x:Name="progressBar" Height="8"
+                     IsIndeterminate="True"
+                     Foreground="{DynamicResource AccentBlue}"
+                     Background="{DynamicResource Surface}"
+                     Margin="0,0,0,8"/>
+
+        <TextBlock Text="请勿关闭启动器，操作进行中..."
+                   FontSize="11"
+                   Foreground="{DynamicResource AccentRed}"
+                   TextWrapping="Wrap"/>
+    </StackPanel>
+</Window>

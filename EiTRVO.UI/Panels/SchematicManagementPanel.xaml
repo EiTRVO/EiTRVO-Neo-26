@@ -1,0 +1,78 @@
+<UserControl x:Class="EiTRVO.UI.Panels.SchematicManagementPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+            <Grid >
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header: back + instance name -->
+                <Border Grid.Row="0" Padding="24,16,24,10"
+                        BorderBrush="{DynamicResource SidebarBorder}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="← 返回"
+                                Style="{StaticResource CardBtn}"
+                                Foreground="{DynamicResource AccentBlue}"
+                                Height="28" FontSize="12" Padding="10,3"
+                                Command="{Binding GoBackCommand}"/>
+                        <TextBlock Text="{Binding InstanceName}"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"
+                                   Margin="16,0,0,0"/>
+                        <TextBlock Text="  投影管理"
+                                   FontSize="16"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Body -->
+                <Grid Grid.Row="1"
+                      Background="{DynamicResource WindowBg}">
+                    <Grid Margin="20,12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- 导入按钮 -->
+                        <Button Grid.Row="0" Content="导入投影"
+                                Style="{StaticResource PrimaryBtn}"
+                                Height="28" FontSize="12" Padding="12,3"
+                                HorizontalAlignment="Left"
+                                Margin="0,0,0,8"
+                                Command="{Binding ImportSchematicCommand}"/>
+
+                        <!-- 空状态 -->
+                        <TextBlock Grid.Row="1"
+                                   Text="暂无投影文件。请将投影文件放入 schematics 目录，或使用上方按钮导入。"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   Margin="0,0,0,8"
+                                   Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <!-- 投影列表 -->
+                        <ListBox Grid.Row="2" x:Name="lstSchematics"
+                                 SelectionMode="Single"
+                                 ItemsSource="{Binding Schematics}"
+                                 ItemTemplate="{StaticResource SchematicCardTemplate}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 Visibility="{Binding IsEmpty, Converter={StaticResource BoolInvertConverter}}">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="HorizontalContentAlignment"
+                                            Value="Stretch"/>
+                                    <Setter Property="Padding" Value="0"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
+                    </Grid>
+                </Grid>
+            </Grid>
+</UserControl>

@@ -1,0 +1,129 @@
+<UserControl x:Class="EiTRVO.UI.Panels.DownloadPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+            <Grid >
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Toolbar -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal"
+                            Margin="24,16,24,6">
+                    <Button Content="刷新版本列表"
+                            Style="{StaticResource CardBtn}"
+                            Height="30" Padding="12,3"
+                            Foreground="{DynamicResource AccentBlue}"
+                            Command="{Binding RefreshVersionsCommand}"/>
+                    <Button Content="下载整合包"
+                            Style="{StaticResource CardBtn}"
+                            Height="30" Padding="12,3"
+                            Foreground="{DynamicResource AccentGreen}"
+                            Command="{Binding OpenModpackDownloadCommand}"/>
+                </StackPanel>
+
+                <!-- Filter bar + instance name -->
+                <Grid Grid.Row="2" Margin="24,4,24,4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock Text="筛选：" VerticalAlignment="Center"
+                                   FontSize="11" Margin="0,0,6,0"
+                                   Foreground="{DynamicResource TextMuted}"/>
+                        <ToggleButton x:Name="filterRelease"
+                                      Content="正式版" Tag="release"
+                                      Style="{StaticResource FilterToggleBtn}"
+                                      Command="{Binding ToggleFilterCommand}"
+                                      CommandParameter="release" Margin="0,0,4,0"/>
+                        <ToggleButton x:Name="filterSnapshot"
+                                      Content="快照版" Tag="snapshot"
+                                      Style="{StaticResource FilterToggleBtn}"
+                                      Command="{Binding ToggleFilterCommand}"
+                                      CommandParameter="snapshot" Margin="0,0,4,0"/>
+                        <ToggleButton x:Name="filterOldBeta"
+                                      Content="旧测试版" Tag="old_beta"
+                                      Style="{StaticResource FilterToggleBtn}"
+                                      Command="{Binding ToggleFilterCommand}"
+                                      CommandParameter="old_beta" Margin="0,0,4,0"/>
+                        <ToggleButton x:Name="filterOldAlpha"
+                                      Content="旧预览版" Tag="old_alpha"
+                                      Style="{StaticResource FilterToggleBtn}"
+                                      Command="{Binding ToggleFilterCommand}"
+                                      CommandParameter="old_alpha"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                Margin="20,0,0,0">
+                        <TextBlock Text="实例名称" VerticalAlignment="Center"
+                                   FontSize="12" Margin="0,0,6,0"
+                                   Foreground="{DynamicResource TextSecondary}"/>
+                        <TextBox x:Name="txtInstanceName"
+                                 Width="180" Height="28"
+                                 Text="{Binding InstanceName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Mod 加载器选择 (Row 3) -->
+                <StackPanel Grid.Row="3" Margin="24,4,24,4">
+                    <TextBlock Text="Mod 加载器" FontSize="12" Margin="0,4,0,2"
+                               Foreground="{DynamicResource TextSecondary}"/>
+                    <ComboBox x:Name="cmbModLoader" Height="30"
+                              SelectedValue="{Binding SelectedLoaderType, Mode=TwoWay}"
+                              SelectedValuePath="Tag">
+                        <ComboBoxItem Content="无 (Vanilla)" Tag=""/>
+                        <ComboBoxItem Content="Fabric" Tag="Fabric"/>
+                        <ComboBoxItem Content="Forge" Tag="Forge"/>
+                        <ComboBoxItem Content="OptiFine" Tag="OptiFine"/>
+                        <ComboBoxItem Content="Quilt" Tag="Quilt"/>
+                        <ComboBoxItem Content="NeoForge" Tag="NeoForge"/>
+                    </ComboBox>
+                    <ComboBox x:Name="cmbModLoaderVersion" Height="30" Margin="0,4,0,0"
+                              ItemsSource="{Binding LoaderVersions}"
+                              SelectedItem="{Binding SelectedLoaderVersion, Mode=TwoWay}"
+                              DisplayMemberPath="DisplayText"
+                              Visibility="{Binding IsModLoaderVersionVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <!-- Forge + OptiFine coexistence checkbox (only visible when Forge selected) -->
+                    <CheckBox x:Name="chkWithOptiFine"
+                              Content="同时安装 OptiFine（放入 mods 文件夹）"
+                              Margin="0,6,0,0"
+                              FontSize="11"
+                              Foreground="{DynamicResource TextSecondary}"
+                              IsChecked="{Binding WithOptiFine, Mode=TwoWay}"
+                              Visibility="{Binding IsOptiFineForForgeVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <ComboBox x:Name="cmbOptiFineForForge" Height="30" Margin="0,4,0,0"
+                              ItemsSource="{Binding OptiFineForForgeVersions}"
+                              SelectedItem="{Binding SelectedOptiFineVersion, Mode=TwoWay}"
+                              DisplayMemberPath="DisplayText"
+                              Visibility="{Binding IsOptiFineDropdownVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    <TextBlock x:Name="lblModLoaderHint" FontSize="10" Margin="0,2,0,0"
+                               Foreground="{DynamicResource TextMuted}"
+                               Text="{Binding ModLoaderHint}"/>
+                </StackPanel>
+
+                <!-- Card list (Row 4) -->
+                <ListBox Grid.Row="4" x:Name="lstVersions"
+                         SelectionMode="Single"
+                         ItemsSource="{Binding FilteredVersions}"
+                         SelectedItem="{Binding SelectedVersion, Mode=TwoWay}"
+                         ItemTemplate="{StaticResource VersionCardTemplate}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         Margin="24,0,24,6">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment"
+                                    Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Grid>
+</UserControl>

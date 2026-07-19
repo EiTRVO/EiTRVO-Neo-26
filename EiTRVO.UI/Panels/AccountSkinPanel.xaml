@@ -1,0 +1,120 @@
+<UserControl x:Class="EiTRVO.UI.Panels.AccountSkinPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      Padding="24,16,24,16">
+            <StackPanel>
+
+                <!-- ===== Header ===== -->
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Content="← 返回"
+                            Style="{StaticResource CardBtn}"
+                            Height="28" Padding="10,3"
+                            Foreground="{DynamicResource TextSecondary}"
+                            VerticalAlignment="Center"
+                            Command="{Binding GoBackCommand}"/>
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0"
+                                VerticalAlignment="Center">
+                        <TextBlock FontSize="18" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}">
+                            <Run Text="{Binding PlayerName}"/>
+                            <Run Text=" 的皮肤"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+
+                <!-- ===== Avatar Preview ===== -->
+                <Border Margin="0,0,0,16" Padding="20,16"
+                        CornerRadius="8"
+                        Background="{DynamicResource CardBg}"
+                        BorderBrush="{DynamicResource PanelBorder}"
+                        BorderThickness="1">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="{Binding StatusText}"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,12"
+                                   HorizontalAlignment="Center"/>
+
+                        <Border Width="128" Height="128"
+                                Background="{DynamicResource PanelBg}"
+                                CornerRadius="4"
+                                BorderBrush="{DynamicResource PanelBorder}"
+                                BorderThickness="1">
+                            <Image Width="128" Height="128"
+                                   Source="{Binding AvatarSource}"
+                                   Stretch="Uniform"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- ===== Skin Change ===== -->
+                <GroupBox Header="更换皮肤" Padding="12" Margin="0,4">
+                    <StackPanel>
+                        <!-- Variant selector -->
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,0,0,10">
+                            <TextBlock Text="模型:"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondary}"
+                                       Margin="0,0,8,0"/>
+                            <ComboBox x:Name="cmbVariant" Height="28"
+                                      Width="130"
+                                      SelectedValuePath="Tag"
+                                      SelectedValue="{Binding SelectedVariant}">
+                                <ComboBoxItem Content="Classic (Steve)"
+                                              Tag="classic"/>
+                                <ComboBoxItem Content="Slim (Alex)"
+                                              Tag="slim"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- File browse + upload -->
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,0,0,8">
+                            <TextBox x:Name="txtSkinPath"
+                                     Width="320" Height="28"
+                                     Text="{Binding SelectedFilePath, Mode=OneWay}"
+                                     IsReadOnly="True"
+                                     VerticalAlignment="Center"
+                                     ToolTip="{Binding SelectedFilePath}"/>
+                            <Button Content="浏览"
+                                    Style="{StaticResource CardBtn}"
+                                    Height="28" Padding="10,3"
+                                    Foreground="{DynamicResource AccentBlue}"
+                                    Margin="8,0,0,0"
+                                    Command="{Binding BrowseSkinFileCommand}"/>
+                            <Button Content="上传并更换"
+                                    Style="{StaticResource PrimaryBtn}"
+                                    Height="28" Padding="12,3"
+                                    Margin="12,0,0,0"
+                                    Command="{Binding UploadSkinCommand}"/>
+                        </StackPanel>
+
+                        <!-- Reset skin -->
+                        <Button Content="重置为默认皮肤"
+                                Style="{StaticResource DangerBtn}"
+                                Height="28" Padding="10,3"
+                                HorizontalAlignment="Left"
+                                Command="{Binding ResetSkinCommand}"/>
+
+                        <TextBlock Text="提示：皮肤文件需为 64×64 或 64×32 的 PNG 图片。上传后即时生效，无需重启启动器。"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,10,0,0"/>
+                    </StackPanel>
+                </GroupBox>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

@@ -1,0 +1,263 @@
+# EiTRVO Neo 26
+
+基于 **EiTRVO ProEngine** 的 Minecraft: Java Edition 启动器，项目代码由 DeepSeek V4 Pro 生成。
+
+> WPF / .NET 8 
+
+---
+
+## 核心特性
+
+### 多账号认证
+- **Microsoft 正版登录** — OAuth 2.0 设备代码流（Xbox Live → XSTS → Minecraft）
+- **Yggdrasil 第三方认证** — 支持自定义验证服务器（authlib-injector 自动下载）
+- **离线模式** — 玩家名验证（3-16 位字母/数字/下划线）
+- 所有凭据使用 **Windows DPAPI** 加密存储（`DataProtectionScope.CurrentUser`）
+
+### 实例管理
+- 多版本隔离目录，互不干扰
+- 支持五种 Mod 加载器：**Forge / NeoForge / Fabric / Quilt / OptiFine**
+- Minecraft 版本 `inheritsFrom` 继承链自动解析
+- 旧版支持（≤1.5.2 资源自动提取）
+- 实例打包/导入（自有 `eitrvo-pack` 格式 + Modrinth MRPack 格式）
+
+### SaveLock 存档加密
+- **AES-256-CBC** + **PBKDF2-SHA256**（100,000 次迭代）
+- 自定义 `.savenc` 格式：Magic Number → Salt → KeyCheck → Metadata → IV → 加密数据 → SHA-256
+- 两种锁定模式：
+  - **一次性（OneTime）** — 解密后不再重新加密
+  - **永久（Permanent）** — 游戏退出后自动重新加密
+- 密码提示 + Windows Hello 快速解锁
+- OneDrive 密钥备份 + `.savkey` 导出/导入 + `.savrec` 恢复文件
+- 启动流程中无缝集成解密/重加密
+
+### EiTRVO Firewall 进程安全
+三层防护体系阻止游戏子进程执行危险操作：
+
+| 层级 | 机制 | 功能 |
+|------|------|------|
+| Layer 1 | `AdjustTokenPrivileges` | 移除 `SeShutdownPrivilege` |
+| Layer 2 | Windows Job Object | `KILL_ON_JOB_CLOSE` + 50 进程上限 |
+| Layer 3 | WMI `Win32_ProcessStartTrace` | 子进程黑名单实时监控 |
+
+黑名单覆盖 20+ 危险进程（`cmd.exe`、`powershell.exe`、`reg.exe`、`curl.exe`、`shutdown.exe` 等），检测到即刻终止并触发保护。
+
+### Mod 管理
+- **Modrinth API v2** 集成 — 搜索、下载、依赖递归解析
+- SHA-1 哈希校验 — 启动前验证所有 Mod 是否被 Modrinth 收录
+- 未收录 Mod 警告 — 弹窗确认后再启动
+- 本地 Mod 启用/禁用（扩展名切换 `.jar` / `.modtemp`）
+- 资源包与光影包管理（支持导入 zip 验证 `pack.mcmeta` / `shaders/`）
+- 原理图管理（`.schematic` / `.schem` / `.litematic`）
+
+### 游戏启动核心
+- JVM 参数智能构建 — 从 Mojang version.json 解析，按 Java 版本兼容性过滤
+- Classpath 去重 — 按 Maven artifact 标识保留最高版本
+- 模块路径冲突自动排除
+- NeoForge/Forge `--add-opens` 自动注入
+- 游戏时长统计（≥30 秒会话记录到 `instance.json`）
+- 完整的诊断日志（启动参数脱敏，stderr 尾部捕获）
+
+### UI/UX
+- **Catppuccin Mocha** 暗色主题（深色/浅色切换）
+- 三栏布局：侧边导航 → 内容区 → 实时运行日志
+- HarmonyOS Sans SC 字体
+- 3D 玩家皮肤预览
+- 通知弹窗动画
+- Windows Hello 生物识别集成（设置锁）
+
+### 隐私保护
+- **零遥测、零分析、零用户行为追踪**
+- 崩溃日志仅写入本地文件，不上传至任何远程服务器
+- 所有网络请求仅限于：Mojang/Microsoft 官方服务、用户指定的 Yggdrasil 服务器、Modrinth/Forge/Fabric 等模组镜像
+
+---
+
+## 技术架构
+
+```
+EiTRVO.Tests (MSTest)
+   ├── 引用 ProEngine + UI
+   └── 50+ 测试文件，12 个 Fake 实现
+        ↓
+EiTRVO.UI (WPF Application)
+   ├── 引用 ProEngine
+   ├── 14 个 XAML Panel + 5 个 Dialog
+   ├── Platforms/WPF/ — 平台服务实现
+   └── App.xaml.cs — DI 容器 + 全局异常处理
+        ↓
+EiTRVO.ProEngine (Class Library)
+   ├── ViewModels/ — 12 个 MVVM ViewModel
+   ├── Orchestrators/ — 8 个业务编排器
+   ├── Services/ — 16 个服务接口与实现
+   ├── Models/ — 24 个数据模型
+   └── Helpers/ — 6 个工具类
+```
+
+**设计模式：**
+- **MVVM** — CommunityToolkit.Mvvm 源代码生成器（`[ObservableProperty]` / `[RelayCommand]`）
+- **依赖注入** — `Microsoft.Extensions.DependencyInjection`
+- **接口抽象** — 核心服务在 ProEngine 定义接口，UI 层提供平台实现（可移植到 WinUI 3）
+- **Fakes 测试** — 无 Mock 框架依赖，纯手写 Fake 实现
+
+---
+
+## 项目结构
+
+```
+EiTRVO Neo 26 Preview (1006)/
+├── EiTRVO.slnx
+├── Directory.Build.props
+├── LICENSE                         # MIT License
+├── LICENSE.HarmonyOS_Sans_Font.txt  # 字体许可协议
+├── README.md
+├── .gitignore
+│
+├── EiTRVO.ProEngine/               # 核心引擎（net8.0，无 UI 依赖）
+│   ├── Helpers/                    # 工具类（端点、JVM 参数、占位符、UUID、国际化）
+│   ├── Models/                     # 数据模型（认证、实例、设置、Modrinth、SaveLock 等）
+│   ├── Services/                   # 核心服务（认证、下载、Mod 加载器、Modrinth、存档锁等）
+│   │   └── Loaders/               # Mod 加载器安装器（Fabric/Forge/NeoForge/Quilt/OptiFine）
+│   ├── Orchestrators/              # 业务编排（账户管理、实例管理、启动编排、备份等）
+│   └── ViewModels/                 # MVVM ViewModel（Home/Download/Settings/Manage/Account 等）
+│
+├── EiTRVO.UI/                      # WPF 桌面应用（net8.0-windows10.0.18362.0）
+│   ├── App.xaml / App.xaml.cs      # 入口点、DI 容器、全局异常处理
+│   ├── MainWindow.xaml             # 主窗口（5 列 Grid 布局）
+│   ├── Panels/                     # 14 个功能面板 + 5 个对话框
+│   ├── Themes/                     # 主题（DarkTheme / Converters / DataTemplates）
+│   ├── Converters/                 # WPF 值转换器
+│   ├── Platforms/WPF/              # 平台服务实现
+│   ├── Services/                   # Windows 特定服务（防火墙 / Windows Hello）
+│   ├── Rendering/                  # 皮肤渲染器
+│   ├── ViewModels/                 # UI 专用 ViewModel
+│   └── font/Font.ttf              # HarmonyOS Sans SC 字体
+│
+├── EiTRVO.Tests/                   # MSTest 单元测试（net8.0-windows）
+│   ├── Fakes/                      # 12 个 Fake 实现
+│   ├── Helpers/                    # 工具类测试（39 个）
+│   ├── Services/                   # 服务测试（~120 个）
+│   ├── Orchestrators/              # 编排器测试（~60 个）
+│   ├── ViewModels/                 # ViewModel 测试（~40 个）
+│   ├── Loaders/                    # 加载器测试（~40 个）
+│   ├── Converters/                 # 转换器测试（24 个）
+│   └── Models/                     # 模型序列化测试（23 个）
+│
+└── publish/                        # 发布输出（.gitignore 排除）
+```
+
+---
+
+## 环境要求
+
+| 要求 | 说明 |
+|------|------|
+| **操作系统** | Windows 10 1903 (Build 18362) 或更高版本 |
+| **架构** | x86_64（64 位） |
+| **运行时** | .NET 8（自包含发布无需安装） |
+| **Java** | 自动检测系统中已安装的 Java（Java 8 / 17 / 21） |
+| **Minecraft** | 需要正版 Minecraft 账号（Microsoft 登录）或 Yggdrasil 第三方账号 |
+
+---
+
+## 构建与运行
+
+### 开发构建
+
+```powershell
+# 还原依赖并构建
+dotnet build
+
+# 运行单元测试
+dotnet test
+
+# 运行 UI 应用（Debug 模式）
+dotnet run --project EiTRVO.UI/EiTRVO.UI.csproj
+```
+
+### 单文件发布
+
+```powershell
+dotnet publish "EiTRVO.UI\EiTRVO.UI.csproj" `
+  -c Release `
+  -r win-x64 `
+  --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:DebugType=embedded `
+  -o publish
+```
+
+---
+
+## 开放源代码许可
+
+本软件使用了以下开源项目：
+
+| 依赖 | 作者 | 许可证 |
+|------|------|--------|
+| CommunityToolkit.Mvvm | .NET Foundation | MIT License |
+| Microsoft.Extensions.DependencyInjection | Microsoft | MIT License |
+| System.Security.Cryptography.ProtectedData | Microsoft | MIT License |
+| System.Management | Microsoft | MIT License |
+| Microsoft.NET.Test.Sdk | Microsoft | MIT License |
+| MSTest.TestFramework | Microsoft | MIT License |
+| MSTest.TestAdapter | Microsoft | MIT License |
+
+所有依赖均为 MIT License，与项目许可证完全兼容。
+
+---
+
+## 开源许可
+
+本项目基于 **MIT License** 开源。详见 [LICENSE](LICENSE) 文件。
+
+```
+```
+### 字体许可
+
+本软件使用 **HarmonyOS Sans** 字体（汉仪字库为华为定制，免费商用授权）。
+
+- 字体文件：`EiTRVO.UI/font/Font.ttf`
+- 许可协议：[LICENSE.HarmonyOS_Sans_Font.txt](LICENSE.HarmonyOS_Sans_Font.txt)
+- 字体版权归华为设备有限公司所有
+- 使用条件：突出显示使用声明、不得修改字体文件、不得单独重新分发字体、保留版权声明
+
+> ⚠️ 字体文件已通过 `.gitignore` 排除在版本控制之外。克隆仓库后需在https://developer.huawei.com/consumer/cn/doc/design-guides-V1/font-0000001157868583-V1自行获取字体文件并将HarmonyOS_Sans_SC_Regular.ttf改名为Font.ttf放置于 `EiTRVO.UI/font`。
+
+---
+
+## 个人信息使用说明
+
+数据安全是项目的基石。以下是软件获取的个人信息及其处理方式。
+
+### 信息收集与用途
+- **Minecraft 玩家名与 UUID** — 用于游戏启动与账号识别
+- **Microsoft OAuth 刷新令牌** — 用于自动登录续期，无需重复输入密码
+- **Yggdrasil 邮箱与密码** — 用于第三方认证服务器登录（密码使用 Windows DPAPI 加密）
+- **游戏时长统计** — 仅记录各实例的累计游玩时间，存储于本地 `instance.json`
+
+### 数据存储与安全
+- 所有个人信息均存储在本地 `.minecraft` 目录下的 `accounts.json`
+- 账户数据使用 Windows DPAPI 加密（`DataProtectionScope.CurrentUser`），仅当前 Windows 用户可解密
+- SaveLock 存档加密的 AES 密钥可选择性备份至您指定的驱动器（需主动授权）
+
+### 无数据上传声明
+- 本软件不包含任何遥测、分析、埋点或用户行为追踪代码
+- 程序崩溃日志仅写入本地文件，不上传至任何远程服务器
+- 您的个人信息不会被传输至项目开发方服务器
+- 所有网络请求仅限于：Minecraft 官方服务（Mojang/Microsoft）、您指定的第三方认证服务器（Yggdrasil）、模组与资源下载镜像（Modrinth/Forge/Fabric 等）
+
+---
+
+## 法律合规性说明
+
+- 请确保您使用本软件或修改代码的行为符合所在地的法律法规。
+- EiTRVO 的开发者对因主动修改代码或添加不在 EiTRVO 开发计划内的功能导致的法律合规性问题不予负责。
+
+---
+
+## 致谢
+
+- **HarmonyOS Sans** 字体由汉仪字库为华为设计
+- **Catppuccin Mocha** 配色方案为 UI 主题提供灵感
+- 所有 NuGet 依赖的作者和维护者

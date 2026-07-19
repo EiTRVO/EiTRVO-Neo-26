@@ -1,0 +1,53 @@
+<UserControl x:Class="EiTRVO.UI.Panels.ManagePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+            <Grid >
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="24,20,24,8">
+                    <TextBlock Text="实例管理" FontSize="18"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimary}"/>
+                    <TextBlock Text="管理已下载的游戏版本"
+                               FontSize="12" Margin="0,4,0,0"
+                               Foreground="{DynamicResource TextSecondary}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal"
+                            Margin="24,0,24,8">
+                    <Button Content="刷新实例列表"
+                            Style="{StaticResource CardBtn}"
+                            Height="30" Padding="10,3"
+                            Foreground="{DynamicResource AccentBlue}"
+                            Command="{Binding RefreshCommand}"/>
+                    <Button Content="导入整合包"
+                            Style="{StaticResource CardBtn}"
+                            Height="30" Padding="10,3" Margin="8,0,0,0"
+                            Foreground="{DynamicResource AccentGreen}"
+                            Command="{Binding ImportCommand}"/>
+                </StackPanel>
+
+                <ListBox Grid.Row="2" x:Name="lstManagedInstances"
+                         SelectionMode="Single"
+                         AllowDrop="True"
+                         Drop="LstManagedInstances_Drop"
+                         PreviewDragOver="LstManagedInstances_PreviewDragOver"
+                         ItemsSource="{Binding Instances}"
+                         ItemTemplate="{StaticResource ManageCardTemplate}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         Margin="24,4,24,16">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment"
+                                    Value="Stretch"/>
+                            <Setter Property="Padding" Value="0"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Grid>
+</UserControl>

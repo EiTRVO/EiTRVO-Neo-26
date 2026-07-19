@@ -1,0 +1,295 @@
+<UserControl x:Class="EiTRVO.UI.Panels.AboutPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+            <Grid >
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Padding="24,20,20,16">
+                    <StackPanel>
+                        <TextBlock Text="关于" FontSize="18"
+                                   FontWeight="Bold" Margin="0,0,0,12"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+
+                        <GroupBox Header="软件信息" Padding="12"
+                                  Margin="0,4">
+                            <StackPanel>
+                                <TextBlock Text="EiTRVO Neo 26" FontSize="16"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimary}"
+                                           Margin="0,0,0,6"/>
+                                <TextBlock Margin="0,0,0,3"
+                                           Foreground="{DynamicResource TextSecondary}">
+                                    <Run Text="EiTRVO ProEngine版本："/><Run Text="{Binding Version, Mode=OneWay}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="开源许可" Padding="12"
+                                  Margin="0,4">
+                            <StackPanel>
+                                <TextBlock Text="本软件基于 MIT License 开源。"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                <Border Background="{DynamicResource DeepDark}"
+                                        CornerRadius="8" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock Text="MIT License"
+                                                   FontSize="14" FontWeight="Bold"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,10"/>
+
+                                        <TextBlock Text="Copyright (c) 2026 EiTRVO"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextSecondary}"
+                                                   Margin="0,0,0,10"/>
+
+                                        <TextBlock Text="Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the &#34;Software&#34;), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,0,10"/>
+
+                                        <TextBlock Text="The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software."
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,0,10"/>
+
+                                        <TextBlock Text="THE SOFTWARE IS PROVIDED &#34;AS IS&#34;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextSecondary}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="字体许可" Padding="12"
+                                  Margin="0,4">
+                            <StackPanel>
+                                <TextBlock Text="本软件使用 HarmonyOS Sans 字体。"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                <Border Background="{DynamicResource DeepDark}"
+                                        CornerRadius="8" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock Text="HarmonyOS Sans 字体许可"
+                                                   FontSize="14" FontWeight="Bold"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,10"/>
+
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,0,4">
+                                            <Run Text="1) "/>
+                                            <Run Text="您应在软件中突出显示使用HarmonyOS Sans字体。"/>
+                                        </TextBlock>
+
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,0,4">
+                                            <Run Text="2) "/>
+                                            <Run Text="您不得对HarmonyOS Sans字体或其任何单个组件进行任何修改。"/>
+                                        </TextBlock>
+
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,0,4">
+                                            <Run Text="3) "/>
+                                            <Run Text="HarmonyOS Sans字体及其任何单个组件均不得在独立基础上重新分发或销售。"/>
+                                        </TextBlock>
+
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,0,10">
+                                            <Run Text="4) "/>
+                                            <Run Text="您应保留HarmonyOS Sans Fonts任何副本的版权声明和本协议。"/>
+                                        </TextBlock>
+
+                                        <TextBlock Text="本字体由汉仪字库为华为定制，遵循免费商用授权。"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource TextSecondary}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="开放源代码许可" Padding="12"
+                                  Margin="0,4">
+                            <StackPanel>
+                                <TextBlock Text="本软件使用了以下开源项目。"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                <Border Background="{DynamicResource DeepDark}"
+                                        CornerRadius="8" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,6">
+                                            <Run Text="CommunityToolkit.Mvvm" FontWeight="Bold"/>
+                                            <Run Text=" — .NET Foundation — "/>
+                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,6">
+                                            <Run Text="Microsoft.Extensions.DependencyInjection" FontWeight="Bold"/>
+                                            <Run Text=" — Microsoft — "/>
+                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,6">
+                                            <Run Text="System.Security.Cryptography.ProtectedData" FontWeight="Bold"/>
+                                            <Run Text=" — Microsoft — "/>
+                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,6">
+                                            <Run Text="System.Management" FontWeight="Bold"/>
+                                            <Run Text=" — Microsoft — "/>
+                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,6">
+                                            <Run Text="Microsoft.NET.Test.Sdk" FontWeight="Bold"/>
+                                            <Run Text=" — Microsoft — "/>
+                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,6">
+                                            <Run Text="MSTest.TestFramework" FontWeight="Bold"/>
+                                            <Run Text=" — Microsoft — "/>
+                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}">
+                                            <Run Text="MSTest.TestAdapter" FontWeight="Bold"/>
+                                            <Run Text=" — Microsoft — "/>
+                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="个人信息使用说明" Padding="12"
+                                  Margin="0,4">
+                            <StackPanel>
+                                <TextBlock Text="数据安全是本项目的基石。以下是软件获取的个人信息及其处理方式。"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                <Border Background="{DynamicResource DeepDark}"
+                                        CornerRadius="8" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock Text="信息收集与用途"
+                                                   FontSize="14" FontWeight="Bold"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,10"/>
+
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• Minecraft 玩家名与 UUID — 用于游戏启动与账号识别"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• Microsoft OAuth 刷新令牌 — 用于自动登录续期，无需重复输入密码"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• Yggdrasil 邮箱与密码 — 用于第三方认证服务器登录（密码使用 Windows DPAPI 加密）"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• 游戏时长统计 — 仅记录各实例的累计游玩时间，存储于本地 instance.json"/>
+                                        </TextBlock>
+
+                                        <TextBlock Text="数据存储与安全"
+                                                   FontSize="14" FontWeight="Bold"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,16,0,10"/>
+
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• 所有个人信息均存储在本地 .minecraft 目录下的 accounts.json"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• 账户数据使用 Windows DPAPI 加密（DataProtectionScope.CurrentUser），仅当前 Windows 用户可解密"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• SaveLock 存档加密的 AES 密钥可选择性备份至您指定的驱动器（需主动授权）"/>
+
+                                        </TextBlock>
+
+                                        <TextBlock Text="无数据上传声明"
+                                                   FontSize="14" FontWeight="Bold"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,16,0,10"/>
+
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• 本软件不包含任何遥测、分析、埋点或用户行为追踪代码"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• 程序崩溃日志仅写入本地文件，不上传至任何远程服务器"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• 您的个人信息不会被传输至项目开发方服务器"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• 所有网络请求仅限于：Minecraft 官方服务（Mojang/Microsoft）、您指定的第三方认证服务器（Yggdrasil）、模组与资源下载镜像（Modrinth/Forge/Fabric 等）"/>
+                                        </TextBlock>
+
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <GroupBox Header="法律合规性说明" Padding="12"
+                                  Margin="0,4">
+                            <StackPanel>
+                                <Border Background="{DynamicResource DeepDark}"
+                                        CornerRadius="8" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,4">
+                                            <Run Text="• 请确保您使用本软件或修改代码的行为符合所在地的法律法规。"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="11"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   TextWrapping="Wrap">
+                                            <Run Text="• EiTRVO 的开发者对因主动修改代码或添加不在 EiTRVO 开发计划内的功能导致的法律合规性问题不予负责。"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+</UserControl>

@@ -1,0 +1,221 @@
+<UserControl x:Class="EiTRVO.UI.Panels.ModManagementPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+            <Grid >
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header: back + instance name -->
+                <Border Grid.Row="0" Padding="24,16,24,10"
+                        BorderBrush="{DynamicResource SidebarBorder}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="← 返回"
+                                Style="{StaticResource CardBtn}"
+                                Foreground="{DynamicResource AccentBlue}"
+                                Height="28" FontSize="12" Padding="10,3"
+                                Command="{Binding GoBackCommand}"/>
+                        <TextBlock Text="{Binding InstanceName}"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"
+                                   Margin="16,0,0,0"/>
+                        <TextBlock Text="  Mod 管理"
+                                   FontSize="16"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   VerticalAlignment="Center"
+                                   Margin="8,0,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Body: sidebar + content -->
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="2"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left sidebar -->
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource SidebarBg}">
+                        <StackPanel Margin="6,8,6,6">
+                            <Button Tag="local"
+                                    Command="{Binding SelectTabCommand}"
+                                    CommandParameter="local">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedTab}" Value="local">
+                                                <Setter Property="Background" Value="{DynamicResource MenuActiveBg}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="本地模组管理" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                            </Button>
+                            <Button Tag="download"
+                                    Command="{Binding SelectTabCommand}"
+                                    CommandParameter="download">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedTab}" Value="download">
+                                                <Setter Property="Background" Value="{DynamicResource MenuActiveBg}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="模组下载" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Thin divider -->
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource SidebarBorder}"/>
+
+                    <!-- Content area -->
+                    <Grid Grid.Column="2"
+                          Background="{DynamicResource WindowBg}">
+                        <Grid Margin="20,12">
+
+                        <!-- 本地模组管理 -->
+                        <Grid Visibility="{Binding IsLocalTabVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 导入按钮 -->
+                            <Button Grid.Row="0" Content="导入本地 Mod"
+                                    Style="{StaticResource PrimaryBtn}"
+                                    Height="28" FontSize="12" Padding="12,3"
+                                    HorizontalAlignment="Left"
+                                    Margin="0,0,0,8"
+                                    Command="{Binding ImportModCommand}"/>
+
+                            <!-- 空状态 -->
+                            <TextBlock Grid.Row="1"
+                                       Text="暂无模组。请将 .jar 文件放入模组文件夹。"
+                                       FontSize="13"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       Margin="0,0,0,8"
+                                       Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                            <!-- Mod list -->
+                            <ListBox Grid.Row="2" x:Name="lstMods"
+                                     SelectionMode="Single"
+                                     ItemsSource="{Binding Mods}"
+                                     ItemTemplate="{StaticResource ModCardTemplate}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="HorizontalContentAlignment"
+                                                Value="Stretch"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
+                        </Grid>
+
+                        <!-- 模组下载 -->
+                        <Grid Visibility="{Binding IsDownloadTabVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Search bar -->
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Height="32"
+                                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="13"
+                                         Foreground="{DynamicResource TextPrimary}"
+                                         Background="{DynamicResource Surface}"
+                                         BorderBrush="{DynamicResource InputBorder}"
+                                         Padding="10,4"
+                                         VerticalContentAlignment="Center">
+                                    <TextBox.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="6,0,0,6"/>
+                                        </Style>
+                                    </TextBox.Resources>
+                                </TextBox>
+                                <Button Grid.Column="1" Content="搜索"
+                                        Style="{StaticResource PrimaryBtn}"
+                                        Height="32" FontSize="13" Padding="16,0"
+                                        Margin="16,0,0,0"
+                                        Command="{Binding SearchCommand}">
+                                    <Button.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="0,6,6,0"/>
+                                        </Style>
+                                    </Button.Resources>
+                                </Button>
+                            </Grid>
+
+                            <!-- Results count / loading -->
+                            <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                                <TextBlock FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Visibility="{Binding IsSearching, Converter={StaticResource BoolToVisibilityConverter}}"
+                                           Text="搜索中..."/>
+                                <TextBlock FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Visibility="{Binding IsSearching, Converter={StaticResource BoolInvertConverter}}">
+                                    <Run Text="找到 "/>
+                                    <Run Text="{Binding TotalSearchResults}" FontWeight="SemiBold"/>
+                                    <Run Text=" 个结果"/>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- No results -->
+                            <TextBlock Grid.Row="2"
+                                       Text="没有找到匹配的模组。请尝试其他关键词。"
+                                       FontSize="13"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding HasNoResults, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                            <!-- Results list -->
+                            <ListBox Grid.Row="2" x:Name="lstSearchResults"
+                                     SelectionMode="Single"
+                                     ItemsSource="{Binding SearchResults}"
+                                     ItemTemplate="{StaticResource ModDownloadCardTemplate}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     Visibility="{Binding HasNoResults, Converter={StaticResource BoolInvertConverter}}">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="HorizontalContentAlignment"
+                                                Value="Stretch"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
+
+                            <!-- Modrinth attribution -->
+                            <TextBlock Grid.Row="3"
+                                       Text="模组数据来自 Modrinth"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,10,0,4"/>
+                        </Grid>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
+</UserControl>
