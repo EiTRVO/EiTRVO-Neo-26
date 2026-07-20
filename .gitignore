@@ -33,6 +33,7 @@ TestResults/
 # Publish Output
 # ============================================================
 publish/
+publish-fd/
 
 # ============================================================
 # Minecraft Runtime Data (generated during testing)
