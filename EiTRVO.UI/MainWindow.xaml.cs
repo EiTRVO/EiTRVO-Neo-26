@@ -335,6 +335,10 @@ namespace EiTRVO.UI
                         _settings.ExcludeRedownloadable = _settingsVm.ExcludeRedownloadable;
                         SaveSettingsFromVm();
                         break;
+                    case nameof(SettingsViewModel.DisableChunkedDownload):
+                        _settings.DisableChunkedDownload = _settingsVm.DisableChunkedDownload;
+                        SaveSettingsFromVm();
+                        break;
                 }
             };
             _manageVm.DownloadProgressChanged += show => _dispatcher.Invoke(() =>

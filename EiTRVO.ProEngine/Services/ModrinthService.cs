@@ -22,6 +22,9 @@ public class ModrinthService : IModrinthService
     /// <summary>Maximum parallel chunks for multi-threaded download.</summary>
     private static readonly int MaxChunkCount = Math.Min(8, Environment.ProcessorCount * 2);
 
+    /// <summary>当为 true 时，跳过 HTTP Range 分块检测，直接使用单连接下载。</summary>
+    public bool ForceSingleConnection { get; set; } = false;
+
     /// <summary>Choose chunk count based on file size. Larger files benefit from more parallelism.</summary>
     private static int GetChunkCount(long totalBytes) => totalBytes switch
     {
@@ -85,6 +88,11 @@ public class ModrinthService : IModrinthService
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
         string fileName = Path.GetFileName(destinationPath);
 
+        // Validate download URL against allowed domains
+        if (!Helpers.DownloadSafetyHelper.IsDownloadUrlAllowed(url))
+            throw new InvalidOperationException(
+                $"下载 URL 指向非允许域名，已拒绝: {new Uri(url).Host}");
+
         // Phase 1: HEAD request to detect Range support
         long totalBytes = 0;
         bool supportsRange = false;
@@ -103,7 +111,20 @@ public class ModrinthService : IModrinthService
 
         ct.ThrowIfCancellationRequested();
 
+        // Reject unreasonably large files (malicious or misconfigured)
+        const long maxFileSize = 1024 * 1024 * 1024; // 1 GB
+        if (totalBytes > maxFileSize)
+            throw new InvalidOperationException(
+                $"文件 {fileName} 大小 ({totalBytes / 1024 / 1024} MB) 超过上限 (1 GB)，已拒绝。");
+
         // Phase 2: Download
+        if (ForceSingleConnection)
+        {
+            await DownloadSingleConnectionAsync(url, destinationPath, totalBytes, fileName,
+                progress, ct);
+            return;
+        }
+
         if (!supportsRange)
         {
             await DownloadSingleConnectionAsync(url, destinationPath, totalBytes, fileName,

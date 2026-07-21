@@ -517,7 +517,18 @@ public partial class ModpackDownloadViewModel : BaseViewModel
                 if (fileEntry.Env?.Client == "unsupported")
                     continue;
 
-                string destPath = Path.Combine(targetDir, fileEntry.Path);
+                string destPath = Path.GetFullPath(Path.Combine(targetDir, fileEntry.Path));
+                string fullTargetDir = Path.GetFullPath(targetDir);
+
+                // Path traversal check
+                if (!destPath.StartsWith(fullTargetDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    _notificationService.AppendLog(
+                        $"整合包文件包含非法路径: {fileEntry.Path}，已跳过。",
+                        NotificationType.Warning);
+                    continue;
+                }
+
                 string? destDir = Path.GetDirectoryName(destPath);
                 if (!string.IsNullOrEmpty(destDir))
                     Directory.CreateDirectory(destDir);

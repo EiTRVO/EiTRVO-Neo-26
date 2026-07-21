@@ -173,6 +173,20 @@
                             </StackPanel>
                         </GroupBox>
 
+                        <!-- ==================== 下载 ==================== -->
+                        <GroupBox Header="下载" Padding="12" Margin="0,4">
+                            <StackPanel>
+                                <CheckBox x:Name="chkDisableChunkedDownload"
+                                          Content="禁用多线程分块下载（若网络不稳定可开启）"
+                                          FontSize="12"
+                                          Foreground="{DynamicResource TextPrimary}"
+                                          IsChecked="{Binding DisableChunkedDownload, Mode=TwoWay}"/>
+                                <TextBlock Text="关闭时使用多线程分块下载加速大文件获取。若下载频繁失败或网络环境限制并发连接，可开启此选项切换为传统单线程下载。"
+                                           FontSize="10" Foreground="{DynamicResource TextMuted}"
+                                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
                         <!-- ==================== 备份 ==================== -->
                         <GroupBox Header="备份" Padding="12" Margin="0,4">
                             <StackPanel>

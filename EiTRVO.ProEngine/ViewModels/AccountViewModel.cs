@@ -223,9 +223,16 @@ public partial class AccountViewModel : BaseViewModel
     private async Task YggdrasilLoginAsync()
     {
         string? serverUrl = YggdrasilServerUrl.Trim();
-        if (string.IsNullOrWhiteSpace(serverUrl) || serverUrl == "https://")
+        if (string.IsNullOrWhiteSpace(serverUrl))
         {
             _notificationService.Show("请输入验证服务器 URL。", NotificationType.Warning);
+            return;
+        }
+
+        // 强制使用 HTTPS（安全策略 — 防止凭证明文传输）
+        if (!serverUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            _notificationService.Show("验证服务器 URL 必须以 https:// 开头。", NotificationType.Warning);
             return;
         }
 

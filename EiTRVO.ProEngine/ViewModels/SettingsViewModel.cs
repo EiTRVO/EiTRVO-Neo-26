@@ -15,6 +15,7 @@ public partial class SettingsViewModel : BaseViewModel
     private readonly INotificationService _notificationService;
     private readonly IDialogService _dialogService;
     private readonly IWindowsHelloService _windowsHello;
+    private readonly IModrinthService _modrinth;
 
     [ObservableProperty]
     private int _memory = 2048;
@@ -71,6 +72,9 @@ public partial class SettingsViewModel : BaseViewModel
     [ObservableProperty]
     private bool _excludeRedownloadable = true;
 
+    [ObservableProperty]
+    private bool _disableChunkedDownload;
+
     /// <summary>上次备份完成时间（UTC），由 MainWindow 同步。</summary>
     [ObservableProperty]
     private DateTimeOffset? _lastBackupTime;
@@ -117,12 +121,18 @@ public partial class SettingsViewModel : BaseViewModel
     /// <summary>触发恢复（由 MainWindow 订阅）。参数: (备份文件路径, 恢复模式)。</summary>
     public event Action<string, RestoreMode>? RestoreRequested;
 
-    public SettingsViewModel(JavaDetectionService javaDetection, INotificationService notificationService, IDialogService dialogService, IWindowsHelloService windowsHello)
+    public SettingsViewModel(JavaDetectionService javaDetection, INotificationService notificationService, IDialogService dialogService, IWindowsHelloService windowsHello, IModrinthService modrinth)
     {
         _javaDetection = javaDetection;
         _notificationService = notificationService;
         _dialogService = dialogService;
         _windowsHello = windowsHello;
+        _modrinth = modrinth;
+    }
+
+    partial void OnDisableChunkedDownloadChanged(bool value)
+    {
+        _modrinth.ForceSingleConnection = value;
     }
 
     partial void OnUseAutoDetectJavaChanged(bool value)
@@ -179,6 +189,7 @@ public partial class SettingsViewModel : BaseViewModel
         BackupInterval = settings.BackupInterval;
         BackupFolder = settings.BackupFolder;
         ExcludeRedownloadable = settings.ExcludeRedownloadable;
+        DisableChunkedDownload = settings.DisableChunkedDownload;
     }
 
     /// <summary>Snapshot current ViewModel state into a LauncherSettings DTO.</summary>
@@ -198,6 +209,7 @@ public partial class SettingsViewModel : BaseViewModel
             BackupInterval = BackupInterval,
             BackupFolder = BackupFolder,
             ExcludeRedownloadable = ExcludeRedownloadable,
+            DisableChunkedDownload = DisableChunkedDownload,
             LastBackupTime = null // LastBackupTime is managed by MainWindow, not synced from VM
         };
     }
@@ -306,6 +318,7 @@ public partial class SettingsViewModel : BaseViewModel
     [RelayCommand]
     private void SaveSettings()
     {
+        _modrinth.ForceSingleConnection = DisableChunkedDownload;
         _notificationService.Show("设置已保存。", NotificationType.Info);
     }
 }

@@ -122,6 +122,12 @@ internal static class OptiFineInstaller
             dlResp.EnsureSuccessStatusCode();
 
             long totalBytes = dlResp.Content.Headers.ContentLength ?? -1;
+
+            // Reject unreasonably large files (malicious or misconfigured)
+            const long maxInstallerSize = 50 * 1024 * 1024; // 50 MB
+            if (totalBytes > maxInstallerSize)
+                throw new InvalidOperationException(
+                    $"OptiFine 安装器大小 ({totalBytes / 1024 / 1024} MB) 异常，已拒绝。");
             string tmp = installerPath + ".part";
             var sw = Stopwatch.StartNew();
             long downloadedBytes = 0;

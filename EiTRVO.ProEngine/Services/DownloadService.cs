@@ -297,6 +297,12 @@ public class DownloadService : IDownloadService
         long totalBytes = resp.Content.Headers.ContentLength ?? -1;
         string fileName = displayName ?? Path.GetFileName(path);
 
+        // Reject unreasonably large files (malicious or misconfigured)
+        const long maxFileSize = 500 * 1024 * 1024; // 500 MB
+        if (totalBytes > maxFileSize)
+            throw new InvalidOperationException(
+                $"文件 {fileName} 大小 ({totalBytes / 1024 / 1024} MB) 超过上限 (500 MB)，已拒绝。");
+
         string tmp = path + ".part";
         var sw = System.Diagnostics.Stopwatch.StartNew();
         long downloadedBytes = 0;

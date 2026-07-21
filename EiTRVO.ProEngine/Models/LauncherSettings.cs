@@ -40,4 +40,8 @@ public class LauncherSettings
 
     /// <summary>上次备份完成时间（UTC）。用于判断下次备份是否到期。</summary>
     public DateTimeOffset? LastBackupTime { get; set; }
+
+    // === 下载 ===
+    /// <summary>禁用多线程分块下载，强制使用单连接下载。</summary>
+    public bool DisableChunkedDownload { get; set; } = false;
 }

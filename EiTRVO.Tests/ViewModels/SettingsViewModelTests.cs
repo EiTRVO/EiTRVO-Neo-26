@@ -12,6 +12,7 @@ public class SettingsViewModelTests
     private readonly FakeDialogService _dialog;
     private readonly FakeWindowsHelloService _windowsHello;
     private readonly JavaDetectionService _javaDetection;
+    private readonly FakeModrinthService _modrinth;
 
     public SettingsViewModelTests()
     {
@@ -19,12 +20,13 @@ public class SettingsViewModelTests
         _dialog = new FakeDialogService();
         _windowsHello = new FakeWindowsHelloService();
         _javaDetection = new JavaDetectionService();
+        _modrinth = new FakeModrinthService();
     }
 
     [TestMethod]
     public void Constructor_InitializesDefaults()
     {
-        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello);
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
 
         Assert.IsNotNull(vm.BackupIntervalOptions);
         Assert.IsTrue(vm.BackupIntervalOptions.Count > 0);
@@ -35,7 +37,7 @@ public class SettingsViewModelTests
     [TestMethod]
     public void ApplySettings_FromLauncherSettings_MapsCorrectly()
     {
-        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello);
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
         var settings = new LauncherSettings
         {
             MemoryMB = 8192,
@@ -61,7 +63,7 @@ public class SettingsViewModelTests
     [TestMethod]
     public void ToSettings_SnapshotsCurrentState()
     {
-        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello);
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
         vm.MemoryText = "4096";
         vm.BackupEnabled = true;
         vm.FirewallEnabled = false;
@@ -79,7 +81,7 @@ public class SettingsViewModelTests
     public async Task WindowsHello_Available_ShowsLockOption()
     {
         _windowsHello.Availability = ProEngine.Services.WindowsHelloAvailability.Available;
-        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello);
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
 
         await vm.CheckWindowsHelloAvailabilityAsync();
 
@@ -91,7 +93,7 @@ public class SettingsViewModelTests
     public async Task WindowsHello_NotAvailable_HidesLockOption()
     {
         _windowsHello.Availability = ProEngine.Services.WindowsHelloAvailability.NotConfigured;
-        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello);
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
 
         await vm.CheckWindowsHelloAvailabilityAsync();
 
@@ -101,7 +103,7 @@ public class SettingsViewModelTests
     [TestMethod]
     public void SettingsLock_WhenAvailable_ToggleWorks()
     {
-        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello);
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
         vm.IsWindowsHelloAvailable = true;
 
         vm.SettingsLockEnabled = true;

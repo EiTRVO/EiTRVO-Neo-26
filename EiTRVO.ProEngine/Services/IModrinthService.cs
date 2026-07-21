@@ -7,6 +7,9 @@ namespace EiTRVO.ProEngine.Services;
 
 public interface IModrinthService
 {
+    /// <summary>当为 true 时，跳过 HTTP Range 分块检测，直接使用单连接下载。</summary>
+    bool ForceSingleConnection { get; set; }
+
     Task<ModrinthSearchResponse> SearchAsync(string query, string mcVersion,
         string loader, int limit = 20, int offset = 0,
         CancellationToken ct = default);

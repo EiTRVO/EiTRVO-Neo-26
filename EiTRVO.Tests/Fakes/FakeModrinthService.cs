@@ -6,6 +6,8 @@ namespace EiTRVO.Tests.Fakes;
 /// <summary>Test-only IModrinthService with configurable responses.</summary>
 public class FakeModrinthService : IModrinthService
 {
+    public bool ForceSingleConnection { get; set; }
+
     // Configurable results — set before calling to return specific data
     public ModrinthSearchResponse? SearchResult { get; set; }
     public ModrinthSearchResponse? SearchProjectsResult { get; set; }

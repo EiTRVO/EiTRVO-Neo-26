@@ -335,6 +335,10 @@ public class AuthService : IAuthService
         // Normalize server URL (remove trailing slash)
         string baseUrl = serverUrl.TrimEnd('/');
 
+        // Belt-and-suspenders: enforce HTTPS for credential safety
+        if (!baseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Yggdrasil 服务器 URL 必须使用 HTTPS。");
+
         // Generate clientToken on first login (stored in returned Account)
         string clientToken = Guid.NewGuid().ToString();
 
@@ -421,6 +425,10 @@ public class AuthService : IAuthService
 
         string baseUrl = account.YggdrasilServerUrl.TrimEnd('/');
 
+        // Belt-and-suspenders: enforce HTTPS for token safety
+        if (!baseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Yggdrasil 服务器 URL 必须使用 HTTPS。");
+
         var refreshRequest = new YggdrasilRefreshRequest
         {
             AccessToken = account.YggdrasilAccessToken,
@@ -506,9 +514,23 @@ public class AuthService : IAuthService
                     AuthlibInjectorDownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);
                 response.EnsureSuccessStatusCode();
 
+                // Reject unreasonably large files (malicious or misconfigured)
+                long totalBytes = response.Content.Headers.ContentLength ?? -1;
+                const long maxAuthlibSize = 50 * 1024 * 1024; // 50 MB
+                if (totalBytes > maxAuthlibSize)
+                    throw new InvalidOperationException(
+                        $"authlib-injector 大小 ({totalBytes / 1024 / 1024} MB) 异常，已拒绝。");
+
                 await using var fs = new FileStream(tmpPath, FileMode.Create,
                     FileAccess.Write, FileShare.None, 81920, useAsync: true);
                 await response.Content.CopyToAsync(fs);
+
+                // Validate downloaded file is a valid JAR/ZIP (magic bytes check)
+                if (!IsValidJar(tmpPath))
+                {
+                    try { File.Delete(tmpPath); } catch { }
+                    throw new InvalidDataException("authlib-injector 下载的文件不是有效的 JAR 文件。");
+                }
 
                 File.Move(tmpPath, jarPath, overwrite: true);
                 return;
@@ -519,6 +541,25 @@ public class AuthService : IAuthService
                 await Task.Delay(800, ct);
             }
         }
+    }
+
+    /// <summary>检查文件是否为有效的 ZIP/JAR 格式（魔数校验）。</summary>
+    private static bool IsValidJar(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            var info = new FileInfo(path);
+            if (info.Length < 4) return false;
+
+            byte[] header = new byte[4];
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (fs.Read(header, 0, 4) < 4) return false;
+
+            // ZIP/JAR magic bytes: PK\x03\x04
+            return header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04;
+        }
+        catch { return false; }
     }
 
     // ==================== Yggdrasil helpers ====================

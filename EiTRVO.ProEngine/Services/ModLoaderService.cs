@@ -273,6 +273,7 @@ public class ModLoaderService : IModLoaderService
         var versions = new List<string>();
         using var reader = new System.Xml.XmlTextReader(new System.IO.StringReader(xml))
         {
+            DtdProcessing = System.Xml.DtdProcessing.Prohibit,
             Namespaces = false
         };
 
@@ -330,6 +331,12 @@ public class ModLoaderService : IModLoaderService
 
         long totalBytes = resp.Content.Headers.ContentLength ?? -1;
         string fileName = displayName ?? Path.GetFileName(path);
+
+        // Reject unreasonably large files (malicious or misconfigured)
+        const long maxFileSize = 200 * 1024 * 1024; // 200 MB
+        if (totalBytes > maxFileSize)
+            throw new InvalidOperationException(
+                $"文件 {fileName} 大小 ({totalBytes / 1024 / 1024} MB) 超过上限 (200 MB)，已拒绝。");
 
         string tmp = path + ".part";
         var sw = System.Diagnostics.Stopwatch.StartNew();
