@@ -36,11 +36,25 @@
 
 | 层级 | 机制 | 功能 |
 |------|------|------|
-| Layer 1 | `AdjustTokenPrivileges` | 移除 `SeShutdownPrivilege` |
+| Layer 1 | `AdjustTokenPrivileges` | 移除 9 项非必需特权（含 `SeDebugPrivilege` 纵深防御） |
 | Layer 2 | Windows Job Object | `KILL_ON_JOB_CLOSE` + 50 进程上限 |
 | Layer 3 | WMI `Win32_ProcessStartTrace` | 子进程黑名单实时监控 |
 
-黑名单覆盖 20+ 危险进程（`cmd.exe`、`powershell.exe`、`reg.exe`、`curl.exe`、`shutdown.exe` 等），检测到即刻终止并触发保护。
+黑名单覆盖 31 项危险进程（`cmd.exe`、`powershell.exe`、`mshta.exe`、`rundll32.exe`、`reg.exe`、`curl.exe`、`certutil.exe`、`schtasks.exe`、`bcdedit.exe` 等），检测到即刻终止进程并触发保护。
+
+### 启动安全（JVM 参数 + mainClass）
+
+针对 `version.json` 可能携带恶意 JVM 参数的多层防护：
+
+**危险参数过滤** — `-javaagent:` / `-agentlib:` / `-agentpath:` 三类代理注入参数在 String 和 Object（`{"rules": [...], "value": [...]}`）两种格式中均被过滤，防止攻击者通过 Object 分支绕过安全检查。
+
+**mainClass 三层验证** — 导入和启动双重关卡，覆盖恶意/未知主类：
+
+| 层级 | 判定 | 行为 |
+|------|------|------|
+| 白名单（6 前缀） | `net.minecraft.` / `cpw.mods.` / `net.minecraftforge.` / `net.fabricmc.` / `net.neoforged.` / `org.quiltmc.` | 静默放行 |
+| 未知主类 | 不在白名单也不在黑名单 | 弹窗确认风险后决定 |
+| 黑名单（7 前缀） | `java.lang.` / `javax.script.` / `java.lang.reflect.` / `jdk.jshell.` / `javax.tools.` / `com.sun.` / `sun.` | 硬阻断，拒绝导入/启动 |
 
 ### Mod 管理
 - **Modrinth API v2** 集成 — 搜索、下载、依赖递归解析
@@ -49,6 +63,11 @@
 - 本地 Mod 启用/禁用（扩展名切换 `.jar` / `.modtemp`）
 - 资源包与光影包管理（支持导入 zip 验证 `pack.mcmeta` / `shaders/`）
 - 原理图管理（`.schematic` / `.schem` / `.litematic`）
+
+### 下载安全
+- **域名白名单** — 仅允许 23 个受信 CDN/API 域名（Modrinth CDN、CurseForge CDN、Mojang/Microsoft 官方、Maven 镜像），非白名单 URL 拒绝下载
+- **SHA-256 完整性校验** — 下载后验证文件哈希
+- **路径穿越防护** — 检测 ZIP 中的 `../` 恶意路径，防止任意文件写入
 
 ### 游戏启动核心
 - JVM 参数智能构建 — 从 Mojang version.json 解析，按 Java 版本兼容性过滤
@@ -177,11 +196,25 @@ dotnet run --project EiTRVO.UI/EiTRVO.UI.csproj
 
 ### 单文件发布
 
+**自包含**（内置 .NET 运行时，无需用户安装）：
+
 ```powershell
 dotnet publish "EiTRVO.UI\EiTRVO.UI.csproj" `
   -c Release `
   -r win-x64 `
   --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:DebugType=embedded `
+  -o publish
+```
+
+**框架依赖**（单文件但不含运行时，用户需安装 .NET 8 桌面运行时）：
+
+```powershell
+dotnet publish "EiTRVO.UI\EiTRVO.UI.csproj" `
+  -c Release `
+  -r win-x64 `
+  --self-contained false `
   -p:PublishSingleFile=true `
   -p:DebugType=embedded `
   -o publish
