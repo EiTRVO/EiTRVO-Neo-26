@@ -434,7 +434,9 @@ public class LaunchOrchestrator
                         if (string.IsNullOrEmpty(jvmArg)) continue;
                         if (jvmArg == "-cp" || jvmArg == "-classpath") { skipNext = true; continue; }
                         jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir);
-                        if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava) && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
+                        if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava)
+                                && JvmArgHelper.IsJvmArgSafe(jvmArg)
+                                && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
                             args.Add(jvmArg);
                     }
                     else if (elem.ValueKind == JsonValueKind.Object && elem.TryGetProperty("value", out var value))

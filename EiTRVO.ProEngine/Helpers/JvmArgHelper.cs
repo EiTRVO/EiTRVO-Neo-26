@@ -22,6 +22,23 @@ public static class JvmArgHelper
         return true;
     }
 
+    /// <summary>需要从 version.json JVM 参数中阻止的危险标志（安全策略）。</summary>
+    private static readonly string[] DangerousJvmArgPrefixes =
+    {
+        "-javaagent:",     // JVM 代理 JAR 注入
+        "-agentlib:",      // 本机代理库注入
+        "-agentpath:",     // 本机代理路径注入
+    };
+
+    /// <summary>检查 JVM 参数是否被安全策略阻止（防止版本 JSON 中的恶意代理注入）。</summary>
+    public static bool IsJvmArgSafe(string arg)
+    {
+        foreach (var prefix in DangerousJvmArgPrefixes)
+            if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+        return true;
+    }
+
     public static string StripEmbeddedQuotes(string arg)
     {
         int eq = arg.IndexOf('=');

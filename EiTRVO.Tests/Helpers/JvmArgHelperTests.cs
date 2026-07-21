@@ -42,6 +42,27 @@ public class JvmArgHelperTests
         Assert.IsTrue(JvmArgHelper.IsRuleAllowed(null));
     }
 
+    [DataTestMethod]
+    [DataRow("-javaagent:authlib-injector.jar=url", false)]
+    [DataRow("-javaagent:../evil.jar", false)]
+    [DataRow("-JAVAAGENT:C:\\path\\agent.jar", false)]
+    [DataRow("-agentlib:jdwp=transport=dt_socket", false)]
+    [DataRow("-agentlib:hprof", false)]
+    [DataRow("-agentpath:C:\\agent.dll", false)]
+    [DataRow("-agentpath:/opt/agent.so", false)]
+    [DataRow("-Djava.security.manager", true)]    // optional — not in our filter
+    [DataRow("-Dfoo=bar", true)]
+    [DataRow("-Xmx2G", true)]
+    [DataRow("-Xss1M", true)]
+    [DataRow("--add-opens=java.base/java.lang=ALL-UNNAMED", true)]
+    [DataRow("-cp", true)]
+    [DataRow("-jar", true)]
+    [DataRow("", true)]
+    public void IsJvmArgSafe_ReturnsExpected(string arg, bool expected)
+    {
+        Assert.AreEqual(expected, JvmArgHelper.IsJvmArgSafe(arg));
+    }
+
     [TestMethod]
     public void IsRuleAllowed_EmptyRules_ReturnsTrue()
     {
