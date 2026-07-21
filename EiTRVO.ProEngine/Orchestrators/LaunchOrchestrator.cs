@@ -36,6 +36,7 @@ public class LaunchOrchestrator
     private readonly SaveLockService _saveLockService;
     private readonly IGameProcessSecurityService? _gameSecurity;
     private readonly IModrinthService _modrinth;
+    private readonly IDialogService? _dialogService;
 
     private Process? _gameProcess;
     private CancellationTokenSource? _gameCts;
@@ -77,7 +78,8 @@ public class LaunchOrchestrator
         IGameFolderService gameFolder,
         SaveLockService saveLockService,
         IModrinthService modrinth,
-        IGameProcessSecurityService? gameSecurity = null)
+        IGameProcessSecurityService? gameSecurity = null,
+        IDialogService? dialogService = null)
     {
         _httpClient = httpClient;
         _authService = authService;
@@ -87,6 +89,7 @@ public class LaunchOrchestrator
         _saveLockService = saveLockService;
         _modrinth = modrinth;
         _gameSecurity = gameSecurity;
+        _dialogService = dialogService;
     }
 
     /// <summary>
@@ -282,6 +285,38 @@ public class LaunchOrchestrator
                       && !string.IsNullOrEmpty(detail.InheritsFrom))
                 nativeVersion = detail.InheritsFrom;
 
+            // 安全校验：mainClass 分层检查
+            string mainClass = detail.MainClass ?? "net.minecraft.client.main.Main";
+            if (JvmArgHelper.IsMainClassBlocked(mainClass))
+            {
+                _notificationService.AppendLog(
+                    $"安全错误：启动时检测到被禁主类「{mainClass}」，已拒绝启动。",
+                    NotificationType.Error);
+                return new LaunchResult { Success = false,
+                    ErrorMessage = $"mainClass（{mainClass}）为被禁用的 JRE 内部类，已拒绝启动。" };
+            }
+            if (!JvmArgHelper.IsMainClassSafe(mainClass))
+            {
+                _notificationService.AppendLog(
+                    $"安全警告：启动时检测到非标准 mainClass：「{mainClass}」",
+                    NotificationType.Warning);
+
+                if (_dialogService != null)
+                {
+                    string warningMsg = string.IsNullOrEmpty(detail.MainClass)
+                        ? "此实例的 version.json 未指定 mainClass，可能导致游戏无法启动。\n\n是否继续启动？"
+                        : $"此实例的 mainClass（{mainClass}）非已知安全值，可能存在恶意代码执行风险。\n\n是否继续启动？";
+                    if (!await _dialogService.ShowConfirmAsync(warningMsg, "安全警告"))
+                        return new LaunchResult { Success = false, ErrorMessage = "用户取消了启动（mainClass 安全警告）。" };
+                }
+                else
+                {
+                    _notificationService.Show(
+                        $"警告：mainClass（{mainClass}）非已知安全值，可能存在恶意代码执行风险。",
+                        NotificationType.Warning, 8000);
+                }
+            }
+
             var args = BuildLaunchArgs(detail, instance.VersionId, versionDir,
                 playerName, versionType, accessToken, uuid, memory,
                 javaInfo.MajorVersion, width, height, userType,
@@ -448,7 +483,9 @@ public class LaunchOrchestrator
                             string jvmArg = JvmArgHelper.StripEmbeddedQuotes((value.GetString() ?? ""));
                             if (jvmArg == "-cp" || jvmArg == "-classpath") { skipNext = true; continue; }
                             jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir);
-                            if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava) && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
+                            if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava)
+                                    && JvmArgHelper.IsJvmArgSafe(jvmArg)
+                                    && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
                                 args.Add(jvmArg);
                         }
                         else if (value.ValueKind == JsonValueKind.Array)
@@ -459,7 +496,9 @@ public class LaunchOrchestrator
                                 string jvmArg = JvmArgHelper.StripEmbeddedQuotes(v.GetString()!);
                                 if (jvmArg == "-cp" || jvmArg == "-classpath") { skipNext = true; continue; }
                                 jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir);
-                                if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava) && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
+                                if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava)
+                                        && JvmArgHelper.IsJvmArgSafe(jvmArg)
+                                        && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
                                     args.Add(jvmArg);
                             }
                         }

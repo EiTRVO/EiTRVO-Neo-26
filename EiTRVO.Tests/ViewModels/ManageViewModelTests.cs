@@ -104,6 +104,11 @@ public class ManageViewModelTests : IDisposable
             ExporterVersion = 25,
             Name = "TestPack"
         };
+        _packService.PeekVersionJsonResult = new VersionDetail
+        {
+            Id = "1.21",
+            MainClass = "net.minecraft.client.main.Main"
+        };
         _dialogService.ConfirmResult = true; // user accepts
 
         var vm = CreateViewModel();
@@ -156,5 +161,107 @@ public class ManageViewModelTests : IDisposable
 
         // Directory should be deleted
         Assert.IsFalse(Directory.Exists(targetDir));
+    }
+
+    // ================================================================
+    // ImportPackAsync — mainClass security check
+    // ================================================================
+
+    [TestMethod]
+    public async Task ImportPack_UnknownMainClass_ShowsWarningAndDeclines()
+    {
+        _packService.ReadManifestResult = new PackManifest
+        {
+            Format = "eitrvo-pack:1",
+            ExporterVersion = 26,
+            Name = "TestPack"
+        };
+        _packService.PeekVersionJsonResult = new VersionDetail
+        {
+            Id = "1.21",
+            MainClass = "com.evil.Hack"
+        };
+        _dialogService.ConfirmResult = false; // user declines
+
+        var vm = CreateViewModel();
+        await vm.ImportPackAsync(Path.Combine(_tempDir, "pack.zip"));
+
+        Assert.AreEqual("安全警告", _dialogService.LastConfirmTitle);
+        StringAssert.Contains(_dialogService.LastConfirmMessage, "com.evil.Hack");
+        StringAssert.Contains(_dialogService.LastConfirmMessage, "恶意代码执行风险");
+        // ExtractAsync should NOT have been called
+        Assert.AreEqual(0, _packService.ExtractAsyncCallCount);
+    }
+
+    [TestMethod]
+    public async Task ImportPack_BlockedMainClass_HardReject()
+    {
+        _packService.ReadManifestResult = new PackManifest
+        {
+            Format = "eitrvo-pack:1",
+            ExporterVersion = 26,
+            Name = "TestPack"
+        };
+        _packService.PeekVersionJsonResult = new VersionDetail
+        {
+            Id = "1.21",
+            MainClass = "java.lang.Runtime"
+        };
+
+        var vm = CreateViewModel();
+        await vm.ImportPackAsync(Path.Combine(_tempDir, "pack.zip"));
+
+        // Hard block: error notification, no dialog, no extract
+        Assert.AreEqual(NotificationType.Error, _notification.LastShowType);
+        StringAssert.Contains(_notification.LastShowMessage, "已拒绝导入");
+        Assert.AreEqual(0, _packService.ExtractAsyncCallCount);
+    }
+
+    [TestMethod]
+    public async Task ImportPack_MissingMainClass_ShowsWarning()
+    {
+        _packService.ReadManifestResult = new PackManifest
+        {
+            Format = "eitrvo-pack:1",
+            ExporterVersion = 26,
+            Name = "TestPack"
+        };
+        _packService.PeekVersionJsonResult = new VersionDetail
+        {
+            Id = "1.21",
+            MainClass = null // missing
+        };
+        _dialogService.ConfirmResult = false;
+
+        var vm = CreateViewModel();
+        await vm.ImportPackAsync(Path.Combine(_tempDir, "pack.zip"));
+
+        Assert.AreEqual("安全警告", _dialogService.LastConfirmTitle);
+        StringAssert.Contains(_dialogService.LastConfirmMessage, "未指定 mainClass");
+        Assert.AreEqual(0, _packService.ExtractAsyncCallCount);
+    }
+
+    [TestMethod]
+    public async Task ImportPack_KnownMainClass_NoWarning()
+    {
+        _packService.ReadManifestResult = new PackManifest
+        {
+            Format = "eitrvo-pack:1",
+            ExporterVersion = 26,
+            Name = "TestPack"
+        };
+        _packService.PeekVersionJsonResult = new VersionDetail
+        {
+            Id = "1.21",
+            MainClass = "net.minecraft.client.main.Main"
+        };
+
+        var vm = CreateViewModel();
+        await vm.ImportPackAsync(Path.Combine(_tempDir, "pack.zip"));
+
+        // The "安全警告" dialog should NOT have been shown for mainClass
+        Assert.AreNotEqual("安全警告", _dialogService.LastConfirmTitle);
+        // ExtractAsync should have been called (import proceeded)
+        Assert.AreEqual(1, _packService.ExtractAsyncCallCount);
     }
 }

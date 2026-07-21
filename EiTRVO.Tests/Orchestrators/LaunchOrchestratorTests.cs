@@ -12,6 +12,7 @@ public class LaunchOrchestratorTests : IDisposable
 {
     private readonly string _tempGameDir;
     private readonly FakeGameFolderService _gameFolder;
+    private readonly FakeNotificationService _notificationService;
     private readonly LaunchOrchestrator _orchestrator;
 
     public LaunchOrchestratorTests()
@@ -20,6 +21,7 @@ public class LaunchOrchestratorTests : IDisposable
         Directory.CreateDirectory(_tempGameDir);
 
         _gameFolder = new FakeGameFolderService { GameDir = _tempGameDir };
+        _notificationService = new FakeNotificationService();
 
         var httpClient = new HttpClient();
 
@@ -27,7 +29,7 @@ public class LaunchOrchestratorTests : IDisposable
             httpClient,
             new FakeAuthService(),
             new FakeModLoaderService(),
-            new FakeNotificationService(),
+            _notificationService,
             _gameFolder,
             new SaveLockService(),
             new FakeModrinthService());
@@ -355,6 +357,164 @@ public class LaunchOrchestratorTests : IDisposable
     }
 
     // ================================================================
+    // BuildLaunchArgs — JVM security filtering
+    // ================================================================
+
+    [TestMethod]
+    public void BuildLaunchArgs_ObjectArgStringValue_JavaAgent_Filtered()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            new
+            {
+                rules = new[] { new { action = "allow", os = new { name = "windows" } } },
+                value = "-javaagent:evil.jar"
+            }
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        Assert.IsFalse(args.Any(a => a.StartsWith("-javaagent:", StringComparison.OrdinalIgnoreCase)),
+            "Object-format -javaagent: should be filtered");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_ObjectArgArrayValue_AgentLib_Filtered()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            new
+            {
+                rules = new[] { new { action = "allow", os = new { name = "windows" } } },
+                value = new[] { "-Xmx2048M", "-agentlib:jdwp=transport=dt_socket" }
+            }
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        Assert.IsFalse(args.Any(a => a.StartsWith("-agentlib:", StringComparison.OrdinalIgnoreCase)),
+            "Object-format -agentlib: should be filtered");
+        Assert.IsTrue(args.Contains("-Xmx2048M"),
+            "Safe args in array value should pass through");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_ObjectArgStringValue_AgentPath_Filtered()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            new
+            {
+                rules = new[] { new { action = "allow" } },
+                value = "-agentpath:C:\\malicious.dll"
+            }
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        Assert.IsFalse(args.Any(a => a.StartsWith("-agentpath:", StringComparison.OrdinalIgnoreCase)),
+            "Object-format -agentpath: should be filtered");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_ObjectArgStringValue_CaseInsensitive_Filtered()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            new
+            {
+                rules = new[] { new { action = "allow", os = new { name = "windows" } } },
+                value = "-JAVAAGENT:C:\\path\\agent.jar"
+            }
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        Assert.IsFalse(args.Any(a => a.StartsWith("-javaagent:", StringComparison.OrdinalIgnoreCase)),
+            "Object-format -JAVAAGENT: (uppercase) should be filtered case-insensitively");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_ObjectArgStringValue_SafeArg_Passes()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            new
+            {
+                rules = new[] { new { action = "allow", os = new { name = "windows" } } },
+                value = "-Dcustom.property=value"
+            }
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        CollectionAssert.Contains(args, "-Dcustom.property=value",
+            "Safe Object-format args should pass through");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_ObjectArgStringValue_RuleDisallowed_Skipped()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            new
+            {
+                rules = new[] { new { action = "allow", os = new { name = "osx" } } },
+                value = "-Dmac.property=value"
+            }
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        Assert.IsFalse(args.Contains("-Dmac.property=value"),
+            "Non-matching rule should skip the arg entirely");
+    }
+
+    // ================================================================
+    // BuildLaunchArgs — mainClass handling
+    // ================================================================
+
+    [TestMethod]
+    public void BuildLaunchArgs_KnownMainClass_AppendedToArgs()
+    {
+        var detail = CreateMinimalDetail();
+        detail.MainClass = "net.minecraft.client.main.Main";
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        CollectionAssert.Contains(args, "net.minecraft.client.main.Main");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_UnknownMainClass_StillAppended()
+    {
+        // BuildLaunchArgs does NOT filter mainClass — the blocking check
+        // happens in LaunchInternalAsync before BuildLaunchArgs is called.
+        var detail = CreateMinimalDetail();
+        detail.MainClass = "com.evil.Hack";
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        CollectionAssert.Contains(args, "com.evil.Hack");
+    }
+
+    // ================================================================
     // Helpers
     // ================================================================
 
@@ -368,6 +528,20 @@ public class LaunchOrchestratorTests : IDisposable
             Assets = "16",
             Libraries = new List<Library>()
         };
+    }
+
+    /// <summary>Creates a minimal detail with JVM arguments constructed from anonymous objects.</summary>
+    private VersionDetail CreateMinimalDetailWithJvmArgs(object[] jvmObjects)
+    {
+        var detail = CreateMinimalDetail();
+        var jvmList = new List<System.Text.Json.JsonElement>();
+        foreach (var obj in jvmObjects)
+        {
+            var json = JsonSerializer.Serialize(obj);
+            jvmList.Add(JsonSerializer.Deserialize<JsonElement>(json));
+        }
+        detail.Arguments = new Arguments { Jvm = jvmList };
+        return detail;
     }
 
     private VersionDetail CreateDetailWithLibrary(Library lib)

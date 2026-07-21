@@ -39,6 +39,53 @@ public static class JvmArgHelper
         return true;
     }
 
+    /// <summary>已知安全的 mainClass 命名空间前缀（Minecraft + 全部支持的 Mod 加载器）。</summary>
+    private static readonly string[] SafeMainClassPrefixes =
+    {
+        "net.minecraft.",
+        "cpw.mods.",
+        "net.minecraftforge.",
+        "net.fabricmc.",
+        "net.neoforged.",
+        "org.quiltmc.",
+    };
+
+    /// <summary>检查 mainClass 是否属于已知安全的命名空间。</summary>
+    public static bool IsMainClassSafe(string? mainClass)
+    {
+        if (string.IsNullOrWhiteSpace(mainClass))
+            return false;
+
+        foreach (var prefix in SafeMainClassPrefixes)
+            if (mainClass.StartsWith(prefix, StringComparison.Ordinal))
+                return true;
+        return false;
+    }
+
+    /// <summary>需要被硬封禁的 mainClass 命名空间前缀（JRE 内部危险类）。</summary>
+    private static readonly string[] BlockedMainClassPrefixes =
+    {
+        "java.lang.",
+        "javax.script.",
+        "java.lang.reflect.",
+        "jdk.jshell.",
+        "javax.tools.",
+        "com.sun.",
+        "sun.",
+    };
+
+    /// <summary>检查 mainClass 是否为被显式封禁的 JRE 内部危险类。命中则硬阻断，不给用户选择。</summary>
+    public static bool IsMainClassBlocked(string? mainClass)
+    {
+        if (string.IsNullOrWhiteSpace(mainClass))
+            return false;
+
+        foreach (var prefix in BlockedMainClassPrefixes)
+            if (mainClass.StartsWith(prefix, StringComparison.Ordinal))
+                return true;
+        return false;
+    }
+
     public static string StripEmbeddedQuotes(string arg)
     {
         int eq = arg.IndexOf('=');

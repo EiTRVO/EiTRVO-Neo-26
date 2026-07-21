@@ -68,4 +68,50 @@ public class JvmArgHelperTests
     {
         Assert.IsTrue(JvmArgHelper.IsRuleAllowed(new List<EiTRVO.ProEngine.Models.Rule>()));
     }
+
+    [DataTestMethod]
+    [DataRow("net.minecraft.client.main.Main", true)]
+    [DataRow("net.minecraft.launchwrapper.Launch", true)]
+    [DataRow("cpw.mods.bootstraplauncher.BootstrapLauncher", true)]
+    [DataRow("net.minecraftforge.bootstrap.ForgeBootstrap", true)]
+    [DataRow("net.fabricmc.loader.impl.launch.knot.KnotClient", true)]
+    [DataRow("net.fabricmc.loader.launch.knot.KnotClient", true)]
+    [DataRow("net.neoforged.fancymodloader.launch.FMLServerLaunch", true)]
+    [DataRow("org.quiltmc.loader.impl.launch.knot.KnotClient", true)]
+    [DataRow("", false)]
+    [DataRow("com.evil.MaliciousClass", false)]
+    [DataRow("java.lang.Runtime", false)]
+    [DataRow("net.malicious.agent.Agent", false)]
+    public void IsMainClassSafe_ReturnsExpected(string? mainClass, bool expected)
+    {
+        Assert.AreEqual(expected, JvmArgHelper.IsMainClassSafe(mainClass));
+    }
+
+    [TestMethod]
+    public void IsMainClassSafe_Null_ReturnsFalse()
+    {
+        Assert.IsFalse(JvmArgHelper.IsMainClassSafe(null));
+    }
+
+    [DataTestMethod]
+    [DataRow("java.lang.Runtime", true)]
+    [DataRow("java.lang.ProcessBuilder", true)]
+    [DataRow("javax.script.ScriptEngineManager", true)]
+    [DataRow("java.lang.reflect.Proxy", true)]
+    [DataRow("jdk.jshell.JShell", true)]
+    [DataRow("javax.tools.ToolProvider", true)]
+    [DataRow("com.sun.internal.Foo", true)]
+    [DataRow("sun.misc.Unsafe", true)]
+    [DataRow("net.minecraft.client.main.Main", false)]
+    [DataRow("", false)]
+    public void IsMainClassBlocked_ReturnsExpected(string? mainClass, bool expected)
+    {
+        Assert.AreEqual(expected, JvmArgHelper.IsMainClassBlocked(mainClass));
+    }
+
+    [TestMethod]
+    public void IsMainClassBlocked_Null_ReturnsFalse()
+    {
+        Assert.IsFalse(JvmArgHelper.IsMainClassBlocked(null));
+    }
 }

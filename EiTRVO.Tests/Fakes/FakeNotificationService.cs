@@ -18,6 +18,8 @@ public class FakeNotificationService : INotificationService
     public string? LastDiagnosticLogTitle { get; private set; }
     public string? LastDiagnosticLogDetails { get; private set; }
     public int ShowCallCount { get; private set; }
+    public string? LastLogMessage { get; private set; }
+    public NotificationType? LastLogType { get; private set; }
 
     public void Show(string message, NotificationType type = NotificationType.Info, int durationMs = 3000)
     {
@@ -26,7 +28,11 @@ public class FakeNotificationService : INotificationService
         LastShowType = type;
     }
 
-    public void AppendLog(string message, NotificationType type = NotificationType.Info) { }
+    public void AppendLog(string message, NotificationType type = NotificationType.Info)
+    {
+        LastLogMessage = message;
+        LastLogType = type;
+    }
     public void ShowDiagnosticLog(string message) { }
 
     public string? WriteDiagnosticLog(string title, string details, bool autoOpen = false)

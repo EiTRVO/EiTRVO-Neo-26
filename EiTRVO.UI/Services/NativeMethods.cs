@@ -53,6 +53,22 @@ internal static class NativeMethods
         IntPtr PreviousState,
         IntPtr ReturnLength);
 
+    // ==================== Privileges to remove ====================
+
+    /// <summary>游戏进程不需要持有的所有特权——启动时移除（纵深防御）。</summary>
+    public static readonly string[] PrivilegesToRemove =
+    {
+        "SeShutdownPrivilege",              // 关机/重启
+        "SeSystemtimePrivilege",            // 系统时钟回拨
+        "SeTimeZonePrivilege",              // 时区变更
+        "SeIncreaseWorkingSetPrivilege",    // 内存工作集挤出
+        "SeProfileSingleProcessPrivilege",  // 性能计数器侧信道采样
+        "SeCreateGlobalPrivilege",          // 全局命名空间对象劫持
+        "SeUndockPrivilege",                // 强制从扩展坞移除
+        "SeRemoteShutdownPrivilege",        // 远程关机
+        "SeDebugPrivilege",                 // 进程注入/内存读取（纵深）
+    };
+
     // ==================== Constants ====================
 
     public const uint PROCESS_QUERY_INFORMATION = 0x0400;

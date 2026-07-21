@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
@@ -244,6 +245,24 @@ public partial class ManageViewModel : BaseViewModel
         var versionDetail = _packService.PeekVersionJson(packPath);
         string mcVersion = versionDetail?.InheritsFrom ?? manifest.InheritsFrom ?? manifest.Minecraft?.Version ?? "";
         string? inheritsFrom = versionDetail?.InheritsFrom ?? manifest.InheritsFrom;
+
+        // 安全校验：mainClass 分层检查
+        string? mainClass = versionDetail?.MainClass;
+        if (JvmArgHelper.IsMainClassBlocked(mainClass))
+        {
+            _notificationService.Show(
+                $"此整合包的 mainClass（{mainClass}）为 JRE 内部类，可能存在恶意代码执行风险，已拒绝导入。",
+                NotificationType.Error);
+            return;
+        }
+        if (!JvmArgHelper.IsMainClassSafe(mainClass))
+        {
+            string warningMsg = string.IsNullOrEmpty(mainClass)
+                ? "此整合包的 version.json 未指定 mainClass，可能导致游戏无法启动。\n\n是否继续导入？"
+                : $"此整合包的 mainClass（{mainClass}）非已知安全值，可能存在恶意代码执行风险。\n\n是否继续导入？";
+            if (!await _dialogService.ShowConfirmAsync(warningMsg, "安全警告"))
+                return;
+        }
 
         DownloadProgressChanged?.Invoke(true);
         ProgressText = "准备导入...";

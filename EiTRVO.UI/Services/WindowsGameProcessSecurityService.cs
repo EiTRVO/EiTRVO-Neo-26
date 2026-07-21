@@ -55,27 +55,30 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         {
             try
             {
-                // ── Layer 1: 移除 SeShutdownPrivilege ──
+                // ── Layer 1: 移除所有非必需特权 ──
                 if (NativeMethods.OpenProcessToken(hProcess,
                     NativeMethods.TOKEN_ADJUST_PRIVILEGES | NativeMethods.TOKEN_QUERY,
                     out IntPtr hToken))
                 {
                     try
                     {
-                        if (NativeMethods.LookupPrivilegeValue(
-                            null, "SeShutdownPrivilege", out var luid))
+                        foreach (var priv in NativeMethods.PrivilegesToRemove)
                         {
-                            var tp = new NativeMethods.TOKEN_PRIVILEGES
+                            if (NativeMethods.LookupPrivilegeValue(
+                                null, priv, out var luid))
                             {
-                                PrivilegeCount = 1,
-                                Privileges = new NativeMethods.LUID_AND_ATTRIBUTES
+                                var tp = new NativeMethods.TOKEN_PRIVILEGES
                                 {
-                                    Luid = luid,
-                                    Attributes = NativeMethods.SE_PRIVILEGE_REMOVED
-                                }
-                            };
-                            NativeMethods.AdjustTokenPrivileges(
-                                hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+                                    PrivilegeCount = 1,
+                                    Privileges = new NativeMethods.LUID_AND_ATTRIBUTES
+                                    {
+                                        Luid = luid,
+                                        Attributes = NativeMethods.SE_PRIVILEGE_REMOVED
+                                    }
+                                };
+                                NativeMethods.AdjustTokenPrivileges(
+                                    hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+                            }
                         }
                     }
                     finally { NativeMethods.CloseHandle(hToken); }
