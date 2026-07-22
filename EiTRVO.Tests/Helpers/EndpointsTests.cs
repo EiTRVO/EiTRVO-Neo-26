@@ -16,16 +16,20 @@ public class EndpointsTests
     [TestMethod]
     public void AssetDownload_FormatsCorrectly()
     {
-        string result = Endpoints.AssetDownload("abcdef1234567890");
+        string result = Endpoints.AssetDownload("abcdef1234567890abcdef1234567890abcdef12");
         StringAssert.StartsWith(result, "https://resources.download.minecraft.net/ab/");
-        StringAssert.EndsWith(result, "abcdef1234567890");
+        StringAssert.EndsWith(result, "abcdef1234567890abcdef1234567890abcdef12");
     }
 
     [TestMethod]
-    public void AssetDownload_ShortHash_StillWorks()
+    public void AssetDownload_InvalidHash_Throws()
     {
-        string result = Endpoints.AssetDownload("ab");
-        StringAssert.Contains(result, "/ab/ab");
+        // Too short
+        Assert.ThrowsException<ArgumentException>(() => Endpoints.AssetDownload("ab"));
+        // Non-hex characters
+        Assert.ThrowsException<ArgumentException>(() => Endpoints.AssetDownload("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"));
+        // Wrong length
+        Assert.ThrowsException<ArgumentException>(() => Endpoints.AssetDownload("abcdef1234567890"));
     }
 
     [TestMethod]

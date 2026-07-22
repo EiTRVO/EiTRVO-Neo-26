@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
@@ -432,6 +433,8 @@ public partial class InstanceDetailViewModel : BaseViewModel
             saveFolderName = Path.GetFileNameWithoutExtension(zipPath);
         }
 
+        saveFolderName = PathSafetyHelper.SanitizeNameComponent(saveFolderName);
+
         string destDir = Path.Combine(SavesFolder, saveFolderName);
         if (Directory.Exists(destDir))
         {
@@ -443,34 +446,28 @@ public partial class InstanceDetailViewModel : BaseViewModel
 
         Directory.CreateDirectory(SavesFolder);
 
-        if (string.IsNullOrEmpty(stripPrefix))
+        foreach (var entry in archive.Entries)
         {
-            archive.ExtractToDirectory(destDir);
-        }
-        else
-        {
-            string fullDestDir = Path.GetFullPath(destDir);
-            foreach (var entry in archive.Entries)
+            if (!string.IsNullOrEmpty(stripPrefix)
+                && !entry.FullName.StartsWith(stripPrefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string relativePath = string.IsNullOrEmpty(stripPrefix)
+                ? entry.FullName
+                : entry.FullName.Substring(stripPrefix.Length);
+            if (string.IsNullOrEmpty(relativePath)) continue;
+
+            string destPath = Path.Combine(destDir, relativePath);
+            PathSafetyHelper.ValidateContained(destPath, destDir);
+
+            if (entry.FullName.EndsWith("/"))
             {
-                if (!entry.FullName.StartsWith(stripPrefix, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                string relativePath = entry.FullName.Substring(stripPrefix.Length);
-                if (string.IsNullOrEmpty(relativePath)) continue;
-
-                string destPath = Path.Combine(destDir, relativePath);
-                string fullDestPath = Path.GetFullPath(destPath);
-                if (!fullDestPath.StartsWith(fullDestDir, StringComparison.OrdinalIgnoreCase))
-                    throw new System.IO.InvalidDataException($"存档包含非法文件路径: {relativePath}");
-
-                if (entry.FullName.EndsWith("/"))
-                {
-                    Directory.CreateDirectory(fullDestPath);
-                }
-                else
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath)!);
-                    entry.ExtractToFile(fullDestPath, overwrite: true);
-                }
+                Directory.CreateDirectory(destPath);
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                entry.ExtractToFile(destPath, overwrite: true);
             }
         }
 

@@ -484,6 +484,20 @@ namespace EiTRVO.UI
         // ==================== 鍒濆鍖?====================
         private async Task InitializeAsync()
         {
+            // === 启动器自完整性校验 ===
+            LauncherIntegrity.LogCallback = msg => _notificationService.AppendLog(msg, NotificationType.Warning);
+            string? integrityWarning = LauncherIntegrity.Verify(_gameDir);
+            if (integrityWarning != null)
+            {
+                bool trusted = await _dialogService.ShowConfirmAsync(integrityWarning, "安全警告");
+                if (!trusted)
+                {
+                    Application.Current.Shutdown();
+                    return;
+                }
+                LauncherIntegrity.UpdateBaseline(_gameDir);
+            }
+
             LoadAccounts();
             ScanVersions();
             _settings = SettingsService.Load(_gameDir);
@@ -714,6 +728,12 @@ namespace EiTRVO.UI
                 try
                 {
                     string? targetDir = File.ReadAllText(markerPath).Trim();
+                    // 校验标记文件内容：目录必须在游戏目录内，防止篡改
+                    if (string.IsNullOrEmpty(targetDir) || !PathSafetyHelper.IsContained(targetDir, _gameDir))
+                    {
+                        File.Delete(markerPath);
+                        continue;
+                    }
                     // 清理残留的 .eibak.tmp
                     if (!string.IsNullOrEmpty(targetDir) && Directory.Exists(targetDir))
                     {

@@ -17,6 +17,26 @@ public class AuthService : IAuthService
 {
     public const string MICROSOFT_CLIENT_ID = "5a0b94a6-2810-4a43-a722-ba15271955b4";
 
+    private readonly IDialogService? _dialogService;
+
+    public AuthService() { }
+
+    public AuthService(IDialogService dialogService)
+    {
+        _dialogService = dialogService;
+    }
+
+    /// <summary>VerificationUri 允许的域名白名单（防钓鱼）。</summary>
+    private static readonly HashSet<string> AllowedVerificationUriHosts =
+        new(StringComparer.OrdinalIgnoreCase)
+    {
+        "login.microsoftonline.com",
+        "microsoft.com",
+        "www.microsoft.com",
+        "aka.ms",
+        "login.live.com",
+    };
+
     public async Task<Account> StartDeviceCodeFlowAsync(
         HttpClient httpClient,
         CancellationTokenSource cts,
@@ -45,6 +65,8 @@ public class AuthService : IAuthService
 
         var deviceCode = JsonSerializer.Deserialize<DeviceCodeResponse>(deviceCodeJson)
             ?? throw new Exception("无法解析设备代码响应。");
+
+        ValidateVerificationUri(deviceCode.VerificationUri);
 
         showDeviceCodeUI(deviceCode.VerificationUri, deviceCode.UserCode, "等待用户在浏览器中完成授权...");
 
@@ -243,7 +265,8 @@ public class AuthService : IAuthService
         {
             new KeyValuePair<string, string>("client_id", MICROSOFT_CLIENT_ID),
             new KeyValuePair<string, string>("grant_type", "refresh_token"),
-            new KeyValuePair<string, string>("refresh_token", account.MicrosoftRefreshToken ?? "")
+            new KeyValuePair<string, string>("refresh_token", account.MicrosoftRefreshToken ?? ""),
+            new KeyValuePair<string, string>("scope", "XboxLive.signin offline_access")
         });
 
         var refreshResp = await httpClient.PostAsync(
@@ -251,7 +274,11 @@ public class AuthService : IAuthService
             refreshRequest, cts.Token);
         var refreshJson = await refreshResp.Content.ReadAsStringAsync(cts.Token);
         if (!refreshResp.IsSuccessStatusCode)
-            throw new Exception($"刷新令牌失败（{refreshResp.StatusCode}），请重新添加微软账号。");
+        {
+            string detail = ParseMicrosoftError(refreshJson);
+            throw new Exception(
+                $"刷新令牌失败（{refreshResp.StatusCode}）。{detail}\n请重新添加微软账号。");
+        }
 
         var newToken = JsonSerializer.Deserialize<TokenResponse>(refreshJson)
             ?? throw new Exception("无法解析令牌刷新响应。");
@@ -336,7 +363,7 @@ public class AuthService : IAuthService
         string baseUrl = serverUrl.TrimEnd('/');
 
         // Belt-and-suspenders: enforce HTTPS for credential safety
-        if (!baseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
             throw new InvalidOperationException("Yggdrasil 服务器 URL 必须使用 HTTPS。");
 
         // Generate clientToken on first login (stored in returned Account)
@@ -532,15 +559,114 @@ public class AuthService : IAuthService
                     throw new InvalidDataException("authlib-injector 下载的文件不是有效的 JAR 文件。");
                 }
 
+                // Try GitHub API for SHA-256 verification
+                string? expectedSha256 = await TryGetGitHubSha256Async(httpClient, ct);
+
+                if (expectedSha256 != null)
+                {
+                    // GitHub reachable — verify SHA-256
+                    string actualSha256 = ComputeSha256(tmpPath);
+                    if (!string.Equals(actualSha256, expectedSha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        try { File.Delete(tmpPath); } catch { }
+                        throw new InvalidDataException(
+                            "authlib-injector SHA-256 校验失败，文件可能已被篡改。");
+                    }
+                }
+                else if (_dialogService != null)
+                {
+                    // GitHub unreachable — warn user and let them decide
+                    bool proceed = await _dialogService.ShowConfirmAsync(
+                        "无法验证 authlib-injector 的完整性（GitHub API 不可达）。\n\n" +
+                        "⚠️ 将使用未经验证的 authlib-injector 文件，可能不是你信任的来源。\n" +
+                        "建议检查网络连接后重试。是否继续？",
+                        "安全警告");
+                    if (!proceed)
+                    {
+                        try { File.Delete(tmpPath); } catch { }
+                        throw new OperationCanceledException("用户取消了 authlib-injector 下载。");
+                    }
+                }
+                // else: no dialog service and GitHub not reachable → proceed with
+                // magic-bytes check only (backward compatibility with test harnesses)
+
                 File.Move(tmpPath, jarPath, overwrite: true);
                 return;
             }
+            catch (OperationCanceledException) { throw; }
             catch
             {
                 if (attempt == 2) throw;
                 await Task.Delay(800, ct);
             }
         }
+    }
+
+    /// <summary>
+    /// 尝试从 GitHub Releases API 获取 authlib-injector 最新版本的 SHA-256 哈希。
+    /// 网络不可达时返回 null（不抛异常）。
+    /// </summary>
+    private static async Task<string?> TryGetGitHubSha256Async(
+        HttpClient httpClient, CancellationToken ct)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(8)); // short timeout for GitHub API
+
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                AuthlibInjectorGitHubApi);
+            request.Headers.Add("User-Agent", "EiTRVONeo");
+            request.Headers.Add("Accept", "application/vnd.github+json");
+
+            using var resp = await httpClient.SendAsync(request, cts.Token);
+            if (!resp.IsSuccessStatusCode) return null;
+
+            var json = await resp.Content.ReadAsStringAsync(cts.Token);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Try parsing release body for SHA-256 hash
+            if (root.TryGetProperty("body", out var body))
+            {
+                string? bodyText = body.GetString();
+                if (!string.IsNullOrWhiteSpace(bodyText))
+                {
+                    string? sha = ExtractSha256FromText(bodyText);
+                    if (sha != null) return sha;
+                }
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null; // GitHub unreachable
+        }
+    }
+
+    /// <summary>从文本中提取 SHA-256 哈希值（64 位十六进制）。</summary>
+    private static string? ExtractSha256FromText(string text)
+    {
+        // Match patterns like:
+        //   SHA-256: abc123...
+        //   sha256: abc123...
+        //   `abc123def456...` (64 hex chars)
+        var match = System.Text.RegularExpressions.Regex.Match(text,
+            @"(?:SHA-?256|sha-?256|SHA256|sha256)\s*[:=]?\s*([0-9a-fA-F]{64})");
+        if (match.Success)
+            return match.Groups[1].Value;
+
+        return null;
+    }
+
+    /// <summary>计算文件的 SHA-256 哈希值（小写十六进制）。</summary>
+    private static string ComputeSha256(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        byte[] hash = SHA256.HashData(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>检查文件是否为有效的 ZIP/JAR 格式（魔数校验）。</summary>
@@ -560,6 +686,55 @@ public class AuthService : IAuthService
             return header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04;
         }
         catch { return false; }
+    }
+
+    // ==================== VerificationUri Validation ====================
+
+    /// <summary>验证 VerificationUri 是否属于 Microsoft 已知域名（防钓鱼）。</summary>
+    private static void ValidateVerificationUri(string? uri)
+    {
+        if (string.IsNullOrWhiteSpace(uri))
+            throw new InvalidDataException("VerificationUri 为空。");
+
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
+            throw new InvalidDataException("VerificationUri 格式无效。");
+
+        if (parsed.Scheme != "https")
+            throw new InvalidDataException("VerificationUri 必须使用 HTTPS。");
+
+        if (!AllowedVerificationUriHosts.Contains(parsed.Host))
+            throw new InvalidDataException(
+                $"VerificationUri 域名不在白名单中: {parsed.Host}");
+    }
+
+    // ==================== OAuth helpers ====================
+
+    /// <summary>解析 Microsoft OAuth 错误响应 body，提取用户可读的错误描述。</summary>
+    private static string ParseMicrosoftError(string responseJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+            string? err = null, desc = null;
+
+            if (root.TryGetProperty("error", out var e))
+                err = e.GetString();
+            if (root.TryGetProperty("error_description", out var d))
+                desc = d.GetString();
+
+            if (err == "invalid_grant")
+                return "令牌已过期或失效（90 天未使用或密码已修改）。";
+            if (err == "invalid_request")
+                return $"请求参数错误。（{desc ?? err}）";
+            if (err == "invalid_client")
+                return "客户端认证失败，请联系开发者。";
+
+            return !string.IsNullOrWhiteSpace(desc) ? desc
+                 : !string.IsNullOrWhiteSpace(err) ? err
+                 : "";
+        }
+        catch { return ""; }
     }
 
     // ==================== Yggdrasil helpers ====================

@@ -56,8 +56,7 @@ public static class DownloadSafetyHelper
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             return false;
 
-        // Only allow HTTPS and HTTP (HTTP for legacy mirrors, though they redirect)
-        if (uri.Scheme != "https" && uri.Scheme != "http")
+        if (uri.Scheme != "https")
             return false;
 
         return AllowedDownloadHosts.Contains(uri.Host);

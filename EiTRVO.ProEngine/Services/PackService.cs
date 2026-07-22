@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 
 namespace EiTRVO.ProEngine.Services;
@@ -248,7 +249,6 @@ public class PackService : IPackService
 
             string targetDir = Path.Combine(gameDir, "versions", instanceName);
             Directory.CreateDirectory(targetDir);
-            string fullTargetDir = Path.GetFullPath(targetDir);
 
             // 计数
             int totalEntries = 0;
@@ -280,10 +280,8 @@ public class PackService : IPackService
                 if (string.IsNullOrEmpty(entry.Name))
                 {
                     string dirPath = Path.Combine(targetDir, relativePath);
-                    string fullDirPath = Path.GetFullPath(dirPath);
-                    if (!fullDirPath.StartsWith(fullTargetDir, StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException($"ZIP 路径穿越检测: {relativePath}");
-                    Directory.CreateDirectory(fullDirPath);
+                    PathSafetyHelper.ValidateContained(dirPath, targetDir);
+                    Directory.CreateDirectory(dirPath);
                     continue;
                 }
 
@@ -292,14 +290,10 @@ public class PackService : IPackService
                     continue;
 
                 string destPath = Path.Combine(targetDir, relativePath);
-                string fullDestPath = Path.GetFullPath(destPath);
+                PathSafetyHelper.ValidateContained(destPath, targetDir);
 
-                // 路径穿越检查
-                if (!fullDestPath.StartsWith(fullTargetDir, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"ZIP 路径穿越检测: {relativePath}");
-
-                Directory.CreateDirectory(Path.GetDirectoryName(fullDestPath)!);
-                entry.ExtractToFile(fullDestPath, true);
+                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                entry.ExtractToFile(destPath, true);
 
                 processed++;
                 progress.Report(DownloadProgress.Overall(processed, totalEntries));

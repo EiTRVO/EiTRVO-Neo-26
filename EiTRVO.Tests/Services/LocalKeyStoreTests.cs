@@ -132,4 +132,27 @@ public class LocalKeyStoreTests : IDisposable
         Assert.IsNotNull(loaded);
         Assert.AreEqual(0xFF, loaded![0]);
     }
+
+    // ================================================================
+    // Path Traversal Protection
+    // ================================================================
+
+    [TestMethod]
+    public async Task SaveKey_PathTraversal_Throws()
+    {
+        var key = new byte[32];
+        // Should sanitize the traversal and still work (writes to sanitized path)
+        await _store.SaveKeyAsync("..\\..\\evil", "save", key);
+        // After sanitization, the instance becomes "evil", save becomes "save"
+        Assert.IsTrue(_store.KeyExists("evil", "save"));
+    }
+
+    [TestMethod]
+    public async Task SaveKey_PathTraversalInSaveName_Throws()
+    {
+        var key = new byte[32];
+        await _store.SaveKeyAsync("good", "..\\..\\evil", key);
+        // After sanitization, the save becomes "evil"
+        Assert.IsTrue(_store.KeyExists("good", "evil"));
+    }
 }

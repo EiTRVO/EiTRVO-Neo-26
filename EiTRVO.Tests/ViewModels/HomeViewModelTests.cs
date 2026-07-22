@@ -188,18 +188,8 @@ public class HomeViewModelTests : IDisposable
         vm.PlayerName = "TestPlayer";
         vm.Memory = 2048;
 
-        try
-        {
-            await vm.LaunchCommand.ExecuteAsync(null);
-        }
-        catch (System.Resources.MissingManifestResourceException)
-        {
-            // Guard triggered but localization resource not embedded in test context.
-            // MissingManifestResourceException from LocalizationHelper.Get inside
-            // the guard branch proves the guard condition was detected.
-            return;
-        }
-        // If no exception, the notification should contain the guard message
+        await vm.LaunchCommand.ExecuteAsync(null);
+
         if (_notification.LastShowMessage != null)
         {
             StringAssert.Contains(_notification.LastShowMessage, "实例");

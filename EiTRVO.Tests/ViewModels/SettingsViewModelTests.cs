@@ -112,4 +112,37 @@ public class SettingsViewModelTests
         vm.SettingsLockEnabled = false;
         Assert.IsFalse(vm.SettingsLockEnabled);
     }
+
+    // ================================================================
+    // BrowseJava — manual Java path validation
+    // ================================================================
+
+    [TestMethod]
+    public async Task BrowseJava_DialogCancelled_DoesNotSetPath()
+    {
+        _dialog.OpenFileResult = null;
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+        string? originalPath = vm.ManualJavaPath;
+
+        await vm.BrowseJavaCommand.ExecuteAsync(null);
+
+        // Nothing should change when user cancels
+        Assert.IsNull(vm.ManualJavaPath);
+    }
+
+    [TestMethod]
+    public async Task BrowseJava_InvalidFile_ShowsWarning()
+    {
+        // Non-existent path → GetJavaVersionInfoAsync returns null
+        _dialog.OpenFileResult = "C:\\nonexistent\\fake_java.exe";
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+
+        await vm.BrowseJavaCommand.ExecuteAsync(null);
+
+        // Should show warning notification
+        Assert.AreEqual(NotificationType.Warning, _notification.LastShowType);
+        StringAssert.Contains(_notification.LastShowMessage, "不是有效的 Java 运行时");
+        // ManualJavaPath should NOT be set
+        Assert.IsNull(vm.ManualJavaPath);
+    }
 }

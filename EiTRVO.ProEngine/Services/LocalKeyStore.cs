@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Orchestrators;
 
 namespace EiTRVO.ProEngine.Services;
@@ -22,8 +23,16 @@ public class LocalKeyStore
     }
 
     private string GetKeyPath(string instanceName, string saveName)
-        => Path.Combine(_gameFolder.GameDir, "eitrvo", "savekeys",
-            instanceName, $"{saveName}.key");
+    {
+        string safeInstance = PathSafetyHelper.SanitizeNameComponent(instanceName);
+        string safeSave = PathSafetyHelper.SanitizeNameComponent(saveName);
+        string path = Path.Combine(_gameFolder.GameDir, "eitrvo", "savekeys",
+            safeInstance, $"{safeSave}.key");
+        // 纵深防御：验证解析后的路径仍在 savekeys 目录内
+        string savekeysBase = Path.Combine(_gameFolder.GameDir, "eitrvo", "savekeys");
+        PathSafetyHelper.ValidateContained(path, savekeysBase);
+        return path;
+    }
 
     /// <summary>DPAPI 加密保存 AES 密钥到本地</summary>
     public async Task SaveKeyAsync(string instanceName, string saveName, byte[] aesKey, CancellationToken ct = default)

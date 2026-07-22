@@ -37,6 +37,7 @@ public class LaunchOrchestrator
     private readonly IGameProcessSecurityService? _gameSecurity;
     private readonly IModrinthService _modrinth;
     private readonly IDialogService? _dialogService;
+    private readonly AccountManager? _accountManager;
 
     private Process? _gameProcess;
     private CancellationTokenSource? _gameCts;
@@ -79,7 +80,8 @@ public class LaunchOrchestrator
         SaveLockService saveLockService,
         IModrinthService modrinth,
         IGameProcessSecurityService? gameSecurity = null,
-        IDialogService? dialogService = null)
+        IDialogService? dialogService = null,
+        AccountManager? accountManager = null)
     {
         _httpClient = httpClient;
         _authService = authService;
@@ -90,6 +92,7 @@ public class LaunchOrchestrator
         _modrinth = modrinth;
         _gameSecurity = gameSecurity;
         _dialogService = dialogService;
+        _accountManager = accountManager;
     }
 
     /// <summary>
@@ -181,7 +184,8 @@ public class LaunchOrchestrator
                 if (account.Type == AccountType.Microsoft)
                 {
                     var (mcToken, name, playerUuid, updatedAccount) =
-                        await _authService.RefreshMicrosoftAccessAsync(_httpClient, account, () => { });
+                        await _authService.RefreshMicrosoftAccessAsync(
+                            _httpClient, account, () => _accountManager?.Save());
                     accessToken = mcToken;
                     playerName = name;
                     uuid = playerUuid;

@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -321,7 +322,7 @@ public class ModLoaderService : IModLoaderService
     /// </summary>
     private static async Task DownloadFileCoreAsync(HttpClient http, string url, string path,
         IProgress<DownloadProgress>? progress = null, string? displayName = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default, string? expectedSha1 = null)
     {
         string? dir = Path.GetDirectoryName(path);
         if (dir != null) Directory.CreateDirectory(dir);
@@ -374,6 +375,18 @@ public class ModLoaderService : IModLoaderService
             try { File.Delete(tmp); } catch { /* best effort */ }
             throw;
         }
+        // SHA-1 integrity verification
+        if (!string.IsNullOrEmpty(expectedSha1))
+        {
+            string actualSha1 = ComputeSha1(tmp);
+            if (!string.Equals(actualSha1, expectedSha1, StringComparison.OrdinalIgnoreCase))
+            {
+                try { File.Delete(tmp); } catch { }
+                throw new InvalidDataException(
+                    $"文件 SHA-1 校验失败: {displayName ?? fileName}\n期望: {expectedSha1}\n实际: {actualSha1}");
+            }
+        }
+
         File.Move(tmp, path, overwrite: true);
     }
 
@@ -391,14 +404,15 @@ public class ModLoaderService : IModLoaderService
     /// </summary>
     internal static async Task DownloadFileAsync(HttpClient http, string url, string path,
         IProgress<DownloadProgress>? progress = null, string? displayName = null,
-        int maxRetries = 3, CancellationToken ct = default)
+        int maxRetries = 3, CancellationToken ct = default, string? expectedSha1 = null)
     {
         for (int attempt = 0; attempt <= maxRetries; attempt++)
         {
             ct.ThrowIfCancellationRequested();
             try
             {
-                await DownloadFileCoreAsync(http, url, path, progress, displayName, ct);
+                await DownloadFileCoreAsync(http, url, path, progress, displayName, ct, expectedSha1:
+                    expectedSha1);
                 return;
             }
             catch (OperationCanceledException) { throw; }
@@ -619,6 +633,11 @@ public class ModLoaderService : IModLoaderService
             string groupId = parts[0];
             string artifactId = parts[1];
             string version = parts[2];
+
+            // 校验 Maven 坐标格式，防止路径穿越和 URL 注入
+            if (!IsValidMavenCoordinate(groupId, artifactId, version, parts))
+                continue;
+
             string mavenPath = $"{groupId.Replace('.', '/')}/{artifactId}/{version}/{artifactId}-{version}.jar";
             string destPath = Path.Combine(libDir, mavenPath);
 
@@ -649,5 +668,60 @@ public class ModLoaderService : IModLoaderService
             showNotification($"预下载了 {downloaded} 个缺失库，正在重试安装器...", NotificationType.Info, 3000);
 
         return downloaded;
+    }
+
+    /// <summary>
+    /// 校验从 Forge 安装器 stderr 提取的 Maven 坐标格式是否安全。
+    /// 防止路径穿越和 URL 注入。
+    /// </summary>
+    private static bool IsValidMavenCoordinate(string groupId, string artifactId, string version, string[] parts)
+    {
+        // groupId: 必须匹配 com.example.sub 格式，每段以字母开头，允许字母数字、点、下划线、连字符
+        if (string.IsNullOrEmpty(groupId) || groupId.Length > 128) return false;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(
+            groupId, @"^[a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)*$")) return false;
+        if (groupId.Contains("..")) return false;
+        foreach (string seg in groupId.Split('.'))
+        {
+            if (string.IsNullOrEmpty(seg) || seg.StartsWith("-") || seg.EndsWith("-"))
+                return false;
+        }
+
+        // artifactId: 字母开头，仅允许字母数字、下划线、点、连字符
+        if (string.IsNullOrEmpty(artifactId) || artifactId.Length > 128) return false;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(
+            artifactId, @"^[a-zA-Z][a-zA-Z0-9_.-]*$")) return false;
+
+        // version: 不得包含路径穿越字符
+        if (string.IsNullOrEmpty(version) || version.Length > 128) return false;
+        if (version.Contains("/") || version.Contains("\\") || version.Contains("..")) return false;
+
+        // classifier (可选): 仅允许字母数字和 .-_
+        if (parts.Length > 3)
+        {
+            string classifier = parts[3];
+            if (classifier.Length > 64) return false;
+            if (!System.Text.RegularExpressions.Regex.IsMatch(
+                classifier, @"^[a-zA-Z0-9._-]+$")) return false;
+        }
+
+        // extension (可选): 仅允许字母数字
+        if (parts.Length > 4)
+        {
+            string ext = parts[4];
+            if (ext.Length > 16) return false;
+            if (!System.Text.RegularExpressions.Regex.IsMatch(
+                ext, @"^[a-zA-Z0-9]+$")) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>计算文件的 SHA-1 哈希值（小写十六进制）。</summary>
+    private static string ComputeSha1(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        byte[] hash = SHA1.HashData(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

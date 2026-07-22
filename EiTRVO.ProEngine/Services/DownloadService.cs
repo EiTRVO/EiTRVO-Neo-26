@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -288,7 +289,7 @@ public class DownloadService : IDownloadService
 
     private async Task DownloadFileFastAsync(HttpClient httpClient, string url, string path,
         IProgress<DownloadProgress>? progress = null, string? displayName = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default, string? expectedSha1 = null)
     {
         using var resp = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
         resp.EnsureSuccessStatusCode();
@@ -338,7 +339,27 @@ public class DownloadService : IDownloadService
             try { File.Delete(tmp); } catch { /* best effort */ }
             throw;
         }
+        // SHA-1 integrity verification
+        if (!string.IsNullOrEmpty(expectedSha1))
+        {
+            string actualSha1 = ComputeSha1(tmp);
+            if (!string.Equals(actualSha1, expectedSha1, StringComparison.OrdinalIgnoreCase))
+            {
+                try { File.Delete(tmp); } catch { }
+                throw new InvalidDataException(
+                    $"文件 SHA-1 校验失败: {displayName ?? fileName}\n期望: {expectedSha1}\n实际: {actualSha1}");
+            }
+        }
+
         File.Move(tmp, path, overwrite: true);
+    }
+
+    /// <summary>计算文件的 SHA-1 哈希值（小写十六进制）。</summary>
+    private static string ComputeSha1(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        byte[] hash = SHA1.HashData(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private async Task DownloadWithSemaphoreAsync(HttpClient httpClient, string url, string path,
@@ -361,14 +382,11 @@ public class DownloadService : IDownloadService
     public void ExtractNativeJar(string jarPath, string destDir)
     {
         using var archive = ZipFile.OpenRead(jarPath);
-        string fullDestDir = Path.GetFullPath(destDir);
         foreach (var entry in archive.Entries)
         {
             if (entry.FullName.StartsWith("META-INF", StringComparison.OrdinalIgnoreCase)) continue;
             string target = Path.Combine(destDir, entry.FullName);
-            string fullTarget = Path.GetFullPath(target);
-            if (!fullTarget.StartsWith(fullDestDir, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"ZIP 路径穿越检测: {entry.FullName}");
+            PathSafetyHelper.ValidateContained(target, destDir);
             if (entry.FullName.EndsWith("/") || entry.FullName.EndsWith("\\"))
                 Directory.CreateDirectory(target);
             else

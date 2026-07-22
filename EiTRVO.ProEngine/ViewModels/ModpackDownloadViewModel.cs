@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
@@ -517,11 +518,10 @@ public partial class ModpackDownloadViewModel : BaseViewModel
                 if (fileEntry.Env?.Client == "unsupported")
                     continue;
 
-                string destPath = Path.GetFullPath(Path.Combine(targetDir, fileEntry.Path));
-                string fullTargetDir = Path.GetFullPath(targetDir);
+                string destPath = Path.Combine(targetDir, fileEntry.Path);
 
-                // Path traversal check
-                if (!destPath.StartsWith(fullTargetDir, StringComparison.OrdinalIgnoreCase))
+                // Path traversal check (skip, don't throw — malicious files are silently dropped)
+                if (!PathSafetyHelper.IsContained(destPath, targetDir))
                 {
                     _notificationService.AppendLog(
                         $"整合包文件包含非法路径: {fileEntry.Path}，已跳过。",
@@ -661,12 +661,10 @@ public partial class ModpackDownloadViewModel : BaseViewModel
                 // Normalize path separators for Windows
                 relativePath = relativePath.Replace('/', Path.DirectorySeparatorChar);
 
-                string fullDestPath = Path.GetFullPath(Path.Combine(targetDir, relativePath));
-                string fullTargetDir = Path.GetFullPath(targetDir);
+                string fullDestPath = Path.Combine(targetDir, relativePath);
 
                 // Path traversal check
-                if (!fullDestPath.StartsWith(fullTargetDir, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException($"整合包覆盖文件包含非法路径: {relativePath}");
+                PathSafetyHelper.ValidateContained(fullDestPath, targetDir);
 
                 if (string.IsNullOrEmpty(zipEntry.Name))
                 {
@@ -805,9 +803,7 @@ public partial class ModpackDownloadViewModel : BaseViewModel
 
     private static string SanitizeInstanceName(string name)
     {
-        foreach (char c in Path.GetInvalidFileNameChars())
-            name = name.Replace(c, '_');
-        return name.Trim();
+        return PathSafetyHelper.SanitizeNameComponent(name);
     }
 
     private void UpdateFileProgressUI(DownloadProgress p)

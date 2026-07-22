@@ -69,7 +69,6 @@ public static class PlatformHelper
     {
         string resourcesDir = Path.Combine(gameDir, "resources");
         string langDir = Path.Combine(resourcesDir, "lang");
-        string fullResourcesDir = Path.GetFullPath(resourcesDir);
 
         string jarPath = Path.Combine(versionDir, $"{versionId}.jar");
         if (!File.Exists(jarPath)) return;
@@ -82,9 +81,7 @@ public static class PlatformHelper
             {
                 string relativePath = entry.FullName.Substring("assets/minecraft/".Length);
                 string dest = Path.Combine(resourcesDir, relativePath);
-                string fullDest = Path.GetFullPath(dest);
-                if (!fullDest.StartsWith(fullResourcesDir, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"ZIP 路径穿越检测: {entry.FullName}");
+                PathSafetyHelper.ValidateContained(dest, resourcesDir);
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
                 if (!File.Exists(dest))
                     entry.ExtractToFile(dest, true);

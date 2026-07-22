@@ -222,9 +222,8 @@ public partial class ManageViewModel : BaseViewModel
                 return;
         }
 
-        string instanceName = manifest.Name ?? Path.GetFileNameWithoutExtension(packPath);
-        foreach (char c in Path.GetInvalidFileNameChars())
-            instanceName = instanceName.Replace(c, '_');
+        string instanceName = PathSafetyHelper.SanitizeNameComponent(
+            manifest.Name ?? Path.GetFileNameWithoutExtension(packPath));
         if (string.IsNullOrWhiteSpace(instanceName)) instanceName = "ImportedPack";
 
         string targetDir = Path.Combine(_gameFolder.GameDir, "versions", instanceName);

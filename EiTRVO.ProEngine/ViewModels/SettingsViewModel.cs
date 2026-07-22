@@ -234,18 +234,29 @@ public partial class SettingsViewModel : BaseViewModel
     [RelayCommand]
     private async Task BrowseJava()
     {
-        var path = await _dialogService.ShowOpenFileDialogAsync("选择 Java 可执行文件", "Java 可执行文件|java.exe;javaw.exe|所有文件|*.*");
-        if (path != null)
+        var path = await _dialogService.ShowOpenFileDialogAsync(
+            "选择 Java 可执行文件",
+            "Java 可执行文件|java.exe;javaw.exe|所有文件|*.*");
+        if (path == null) return;
+
+        // Validate the selected executable by running -version
+        var versionInfo = await JavaDetectionService.GetJavaVersionInfoAsync(path);
+        if (versionInfo == null)
         {
-            ManualJavaPath = path;
-            SelectedJava = new JavaInfo
-            {
-                Path = path,
-                Version = "手动指定",
-                ShortVersion = System.IO.Path.GetFileName(path),
-                MajorVersion = 0
-            };
+            _notificationService.Show(
+                "选择的文件不是有效的 Java 运行时，请选择 java.exe 或 javaw.exe。",
+                NotificationType.Warning);
+            return;
         }
+
+        ManualJavaPath = path;
+        SelectedJava = new JavaInfo
+        {
+            Path = path,
+            Version = versionInfo.Value.full,
+            ShortVersion = versionInfo.Value.shortVer,
+            MajorVersion = versionInfo.Value.major
+        };
     }
 
     /// <summary>检查 Windows Hello 可用性，更新 UI 状态。</summary>

@@ -104,19 +104,19 @@ public partial class HomeViewModel : BaseViewModel
     {
         if (_launchOrchestrator.IsGameRunning)
         {
-            _notificationService.Show(LocalizationHelper.Get("NotificationGameAlreadyRunning"), NotificationType.Warning);
+            _notificationService.Show("游戏已在运行中。", NotificationType.Warning);
             return;
         }
 
         if (SelectedInstance == null)
         {
-            _notificationService.Show(LocalizationHelper.Get("NotificationSelectInstance"), NotificationType.Warning);
+            _notificationService.Show("请先选择要启动的实例。", NotificationType.Warning);
             return;
         }
 
         if (SelectedJava == null)
         {
-            _notificationService.Show(LocalizationHelper.Get("NotificationSelectJava"), NotificationType.Warning);
+            _notificationService.Show("请先选择 Java 运行环境。", NotificationType.Warning);
             return;
         }
 
@@ -160,7 +160,7 @@ public partial class HomeViewModel : BaseViewModel
                 var account = SelectedAccount;
                 if (account == null)
                 {
-                    _notificationService.Show(LocalizationHelper.Get("NotificationSelectMsAccount"), NotificationType.Warning);
+                    _notificationService.Show("请先选择微软账号。", NotificationType.Warning);
                     return;
                 }
 

@@ -8,6 +8,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using static EiTRVO.ProEngine.Helpers.Endpoints;
 
@@ -244,6 +245,7 @@ internal static class ForgeInstaller
 
                 if (string.IsNullOrEmpty(url) && path.Contains("forge"))
                 {
+                    PathSafetyHelper.ValidateContained(dest, libDir);
                     bool extracted = ModLoaderService.ExtractForgeJar(installerPath, path, installerFile, dest);
                     if (extracted)
                         continue;

@@ -55,7 +55,8 @@ namespace EiTRVO.UI
                 };
                 var client = new System.Net.Http.HttpClient(handler)
                 {
-                    Timeout = TimeSpan.FromMinutes(10)
+                    Timeout = TimeSpan.FromMinutes(10),
+                    DefaultRequestVersion = System.Net.HttpVersion.Version11
                 };
                 client.DefaultRequestHeaders.Add("User-Agent", $"EiTRVONeo/{AppInfo.Version} (EiTRVO)");
                 return client;
@@ -67,7 +68,8 @@ namespace EiTRVO.UI
             services.AddSingleton<IGameProcessSecurityService, WindowsGameProcessSecurityService>();
 
             // === Services ===
-            services.AddSingleton<IAuthService, AuthService>();
+            services.AddSingleton<IAuthService, AuthService>(sp =>
+                new AuthService(sp.GetRequiredService<IDialogService>()));
             services.AddSingleton<IDownloadService, DownloadService>();
             services.AddSingleton<IModLoaderService, ModLoaderService>();
             services.AddSingleton<IPackService, PackService>();

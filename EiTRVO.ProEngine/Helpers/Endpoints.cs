@@ -5,12 +5,12 @@ public static class Endpoints
     // Minecraft version manifest
     public const string VersionManifestUrl = "https://launchermeta.mojang.com/mc/game/version_manifest.json";
 
-    // Asset download (hash must be at least 2 characters)
+    // Asset download — hash must be a valid 40-char hex SHA-1
     public static string AssetDownload(string hash)
     {
         ArgumentNullException.ThrowIfNull(hash);
-        if (hash.Length < 2)
-            throw new ArgumentException("Asset hash must be at least 2 characters.", nameof(hash));
+        if (!System.Text.RegularExpressions.Regex.IsMatch(hash, @"^[a-fA-F0-9]{40}$"))
+            throw new ArgumentException("Hash 必须为 40 位十六进制字符串 (SHA-1)。", nameof(hash));
         return $"https://resources.download.minecraft.net/{hash.Substring(0, 2)}/{hash}";
     }
 
@@ -34,6 +34,8 @@ public static class Endpoints
 
     // authlib-injector (Yggdrasil 第三方验证)
     public const string AuthlibInjectorDownloadUrl = "https://authlib-injector.yushi.moe/artifacts/authlib-injector.jar";
+    public const string AuthlibInjectorGitHubApi =
+        "https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest";
 
     // ==================== Fabric Meta API ====================
     public const string FabricMetaBase = "https://meta.fabricmc.net/v2";

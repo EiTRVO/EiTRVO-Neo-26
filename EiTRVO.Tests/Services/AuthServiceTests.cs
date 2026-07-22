@@ -54,6 +54,118 @@ public class AuthServiceTests
     }
 
     // ================================================================
+    // VerificationUri Domain Validation (anti-phishing)
+    // ================================================================
+
+    [TestMethod]
+    public async Task VerificationUri_ValidMicrosoftDomain_DoesNotThrowInvalidData()
+    {
+        var deviceCodeJson = """
+        {
+            "device_code": "test-dc",
+            "user_code": "ABC123",
+            "verification_uri": "https://login.microsoftonline.com/common/oauth2/deviceauth",
+            "expires_in": 15,
+            "interval": 5
+        }
+        """;
+
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, deviceCodeJson);
+
+        var authService = new AuthService();
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+        cts.Cancel(); // cancel immediately to avoid polling loop
+
+        // Should NOT throw InvalidDataException (domain is valid)
+        // May throw OperationCanceledException due to immediate cancellation
+        try
+        {
+            await authService.StartDeviceCodeFlowAsync(
+                http, cts, (_, _, _) => { }, _ => { }, () => { });
+        }
+        catch (InvalidDataException)
+        {
+            Assert.Fail("Valid Microsoft domain should not be rejected.");
+        }
+        catch (OperationCanceledException) { /* expected — cancelled before polling */ }
+    }
+
+    [TestMethod]
+    public async Task VerificationUri_PhishingDomain_ThrowsInvalidData()
+    {
+        var deviceCodeJson = """
+        {
+            "device_code": "test-dc",
+            "user_code": "ABC123",
+            "verification_uri": "https://phishing.example.com/microsoft-login",
+            "expires_in": 15,
+            "interval": 5
+        }
+        """;
+
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, deviceCodeJson);
+
+        var authService = new AuthService();
+        using var cts = new CancellationTokenSource();
+
+        var ex = await Assert.ThrowsExceptionAsync<InvalidDataException>(() =>
+            authService.StartDeviceCodeFlowAsync(
+                http, cts, (_, _, _) => { }, _ => { }, () => { }));
+
+        StringAssert.Contains(ex.Message, "域名不在白名单中");
+    }
+
+    [TestMethod]
+    public async Task VerificationUri_HttpScheme_ThrowsInvalidData()
+    {
+        var deviceCodeJson = """
+        {
+            "device_code": "test-dc",
+            "user_code": "ABC123",
+            "verification_uri": "http://login.microsoftonline.com/common/oauth2/deviceauth",
+            "expires_in": 15,
+            "interval": 5
+        }
+        """;
+
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, deviceCodeJson);
+
+        var authService = new AuthService();
+        using var cts = new CancellationTokenSource();
+
+        var ex = await Assert.ThrowsExceptionAsync<InvalidDataException>(() =>
+            authService.StartDeviceCodeFlowAsync(
+                http, cts, (_, _, _) => { }, _ => { }, () => { }));
+
+        StringAssert.Contains(ex.Message, "必须使用 HTTPS");
+    }
+
+    [TestMethod]
+    public async Task VerificationUri_Empty_ThrowsInvalidData()
+    {
+        var deviceCodeJson = """
+        {
+            "device_code": "test-dc",
+            "user_code": "ABC123",
+            "verification_uri": "",
+            "expires_in": 15,
+            "interval": 5
+        }
+        """;
+
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, deviceCodeJson);
+
+        var authService = new AuthService();
+        using var cts = new CancellationTokenSource();
+
+        var ex = await Assert.ThrowsExceptionAsync<InvalidDataException>(() =>
+            authService.StartDeviceCodeFlowAsync(
+                http, cts, (_, _, _) => { }, _ => { }, () => { }));
+
+        StringAssert.Contains(ex.Message, "为空");
+    }
+
+    // ================================================================
     // OAuth Token Refresh — error cases
     // ================================================================
 

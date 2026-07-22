@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using EiTRVO.ProEngine.Helpers;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
@@ -212,7 +213,8 @@ internal static class OptiFineInstaller
             if (lwTxtEntry == null)
                 throw new Exception("OptiFine JAR 中未找到 launchwrapper-of.txt，无法安装。");
             using var lwReader = new StreamReader(lwTxtEntry.Open());
-            lwVersion = (await lwReader.ReadToEndAsync()).Trim();
+            string rawLwVersion = (await lwReader.ReadToEndAsync()).Trim();
+            lwVersion = PathSafetyHelper.SanitizeNameComponent(rawLwVersion);
             if (string.IsNullOrEmpty(lwVersion))
                 throw new Exception("launchwrapper-of.txt 为空，无法确定版本。");
 
@@ -225,6 +227,7 @@ internal static class OptiFineInstaller
             string lwLibDir = Path.Combine(gameDir, "libraries", "optifine", "launchwrapper-of", lwVersion);
             Directory.CreateDirectory(lwLibDir);
             string lwDestPath = Path.Combine(lwLibDir, lwJarName);
+            PathSafetyHelper.ValidateContained(lwDestPath, lwLibDir);
             if (!File.Exists(lwDestPath))
                 lwJarEntry.ExtractToFile(lwDestPath);
         }

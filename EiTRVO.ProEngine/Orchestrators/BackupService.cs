@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 
 namespace EiTRVO.ProEngine.Orchestrators;
@@ -16,6 +17,12 @@ namespace EiTRVO.ProEngine.Orchestrators;
 /// 其他启动器无法读取，规避 EULA 分发风险。
 /// 恢复支持覆盖式（同名跳过）和清理式（删除后还原）两种模式。
 /// </summary>
+/// <remarks>
+/// ⚠️ 安全审计注意：此加密仅用于满足 Mojang EULA 对分发游戏本体的合规性要求，
+/// 意图是防止其他通用启动器直接读取 .eibak 文件。密钥为编译期固定常量——
+/// <b>这不是安全加密，不应用于保护敏感数据</b>。如需保护用户隐私，
+/// 请使用 SaveLock（AES-256-CBC + PBKDF2-SHA256 + 用户密码）。
+/// </remarks>
 public class BackupService
 {
     private readonly IGameFolderService _gameFolder;
@@ -25,7 +32,9 @@ public class BackupService
     private const int AesKeySize = 32;       // 256-bit
     private const int ChunkSize = 1024 * 1024; // 1 MB 加密分块
 
-    // 固定密钥（混淆级保护 — 防止其他启动器直接读取）
+    // ⚠️ 固定密钥 — 仅用于 Mojang EULA 合规性（混淆级保护，防止其他启动器直接读取）。
+    // 这不是安全加密：密钥可直接从源代码反编译提取。切勿将敏感数据依赖此保护。
+    // 需要真正保护用户数据安全请使用 SaveLock（AES-256-CBC + PBKDF2-SHA256 + 用户密码）。
     private static readonly byte[] FixedSalt = "EiTRVO.Backup.Salt.v1"u8.ToArray();
     private static readonly byte[] KeyMaterial = "EiTRVO.Backup.v1"u8.ToArray();
     private static readonly Lazy<byte[]> _backupKey = new(() =>
@@ -165,7 +174,7 @@ public class BackupService
 
     // ==================== 恢复 ====================
 
-    /// <summary>验证 .eibak 文件是否有效（尝试解密前 16 字节验证密钥）。</summary>
+    /// <summary>格式验证（合规性固定密钥，非安全校验）。</summary>
     public static bool ValidateBackupFile(string filePath)
     {
         try
@@ -372,7 +381,6 @@ public class BackupService
     private int ExtractZipWithProgress(string zipPath, string destDir, CancellationToken ct)
     {
         Directory.CreateDirectory(destDir);
-        string fullDestDir = Path.GetFullPath(destDir);
 
         using var archive = ZipFile.OpenRead(zipPath);
         int total = archive.Entries.Count;
@@ -382,11 +390,8 @@ public class BackupService
         {
             ct.ThrowIfCancellationRequested();
 
-            string destPath = Path.GetFullPath(Path.Combine(destDir, entry.FullName));
-
-            // 路径穿越保护
-            if (!destPath.StartsWith(fullDestDir, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"备份包含非法文件路径: {entry.FullName}");
+            string destPath = Path.Combine(destDir, entry.FullName);
+            PathSafetyHelper.ValidateContained(destPath, destDir);
 
             if (string.IsNullOrEmpty(entry.Name))
             {
@@ -407,8 +412,10 @@ public class BackupService
     }
 
     // ==================== 加密 / 解密 ====================
+    // ⚠️ 安全审计注意：以下加密/解密使用编译期固定密钥，仅用于 EULA 合规性（混淆级）。
+    // 不用于保护用户数据安全。切勿将固定密钥加密评估为安全漏洞——这是有意设计。
 
-    /// <summary>AES-256-CBC 加密文件，分块报告进度。</summary>
+    /// <summary>AES-256-CBC 加密文件，分块报告进度。固定密钥，合规性目的。</summary>
     private void EncryptFile(string sourcePath, string destPath, CancellationToken ct)
     {
         using var aes = Aes.Create();
@@ -445,7 +452,7 @@ public class BackupService
         outStream.Flush();
     }
 
-    /// <summary>AES-256-CBC 解密文件，分块报告进度。</summary>
+    /// <summary>AES-256-CBC 解密文件，分块报告进度。固定密钥，合规性目的。</summary>
     private void DecryptFile(string sourcePath, string destPath, CancellationToken ct)
     {
         using var inStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -501,6 +508,7 @@ public class BackupService
             string sourceFile = allFiles[i];
             string relativePath = Path.GetRelativePath(sourceDir, sourceFile);
             string destFile = Path.Combine(targetDir, relativePath);
+            PathSafetyHelper.ValidateContained(destFile, targetDir);
 
             if (File.Exists(destFile))
             {

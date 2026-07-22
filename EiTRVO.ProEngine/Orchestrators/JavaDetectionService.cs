@@ -109,7 +109,7 @@ public class JavaDetectionService
         catch { }
     }
 
-    private static async Task<(string full, string shortVer, int major)?> GetJavaVersionInfoAsync(string javaPath)
+    internal static async Task<(string full, string shortVer, int major)?> GetJavaVersionInfoAsync(string javaPath)
     {
         try
         {
