@@ -23,7 +23,7 @@ namespace EiTRVO.UI
 {
     public partial class MainWindow : Window
     {
-        // ==================== DI 娉ㄥ叆渚濊禆 ====================
+        // ==================== DI 注入依赖 ====================
         private readonly HttpClient _httpClient;
         private readonly IAuthService _authService;
         private readonly IDownloadService _downloadService;
@@ -47,7 +47,7 @@ namespace EiTRVO.UI
         private readonly BackupService _backupService;
         private readonly string _gameDir;
 
-        // ==================== ViewModels (DI 娉ㄥ叆) ====================
+        // ==================== ViewModels (DI 注入) ====================
         private readonly HomeViewModel _homeVm;
         private readonly DownloadViewModel _downloadVm;
         private readonly SettingsViewModel _settingsVm;
@@ -62,7 +62,7 @@ namespace EiTRVO.UI
         private readonly AccountSkinViewModel _accountSkinVm;
         private readonly SchematicManagementViewModel _schematicManagementVm;
 
-        // ==================== UI 鐘舵€?====================
+        // ==================== UI 状态 ====================
         public ObservableCollection<NotificationItem> Notifications => _notificationService.Notifications;
         public ObservableCollection<LogEntry> LogEntries => _notificationService.LogEntries;
         private readonly Dictionary<string, Button> _sidebarButtons = new();
@@ -76,11 +76,11 @@ namespace EiTRVO.UI
         private const int VerifyCacheSeconds = 30;
         private string? _lastLaunchLogPath;
 
-        // ==================== App 淇℃伅 ====================
+        // ==================== App 信息 ====================
         public string AppVersion => AppInfo.Version;
         public string AppVersionShort => AppInfo.VersionShort;
 
-        // ==================== 鏋勯€犲嚱鏁?====================
+        // ==================== 构造函数 ====================
         public MainWindow(
             HttpClient httpClient,
             IAuthService authService,
