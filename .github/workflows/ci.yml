@@ -95,7 +95,7 @@ jobs:
           dotnet build "EiTRVO.Tests/EiTRVO.Tests.csproj" --no-restore -c Release
 
       - name: Run all tests
-        run: dotnet test "EiTRVO.Tests/EiTRVO.Tests.csproj" --no-restore --no-build -c Release --logger "trx;LogFileName=test-results.trx" --results-directory "${{ github.workspace }}/TestResults"
+        run: dotnet test "EiTRVO.Tests/EiTRVO.Tests.csproj" --no-restore --no-build -c Release --logger "trx;LogFileName=test-results.trx" --results-directory "TestResults"
 
       - name: Publish test results
         uses: dorny/test-reporter@v1
@@ -111,7 +111,7 @@ jobs:
         if: always()
         with:
           name: test-results-${{ github.sha }}
-          path: "${{ github.workspace }}/TestResults/"
+          path: "TestResults/"
           retention-days: 14
 
       - name: Check code formatting
