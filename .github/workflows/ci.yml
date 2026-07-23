@@ -85,13 +85,13 @@ jobs:
           Write-Host "Font acquired: HarmonyOS_SansSC_Regular.ttf -> $fontFile"
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore "EiTRVO.UI/EiTRVO.UI.csproj"
 
       - name: Build all projects
-        run: dotnet build --no-restore -c Release
+        run: dotnet build "EiTRVO.UI/EiTRVO.UI.csproj" --no-restore -c Release
 
       - name: Run all tests
-        run: dotnet test --no-restore -c Release --logger "trx;LogFileName=test-results.trx" --results-directory "${{ github.workspace }}/TestResults"
+        run: dotnet test "EiTRVO.Tests/EiTRVO.Tests.csproj" --no-restore -c Release --logger "trx;LogFileName=test-results.trx" --results-directory "${{ github.workspace }}/TestResults"
 
       - name: Publish test results
         uses: dorny/test-reporter@v1
@@ -112,4 +112,4 @@ jobs:
 
       - name: Check code formatting
         continue-on-error: true
-        run: dotnet format --verify-no-changes --verbosity minimal
+        run: dotnet format "EiTRVO.UI/EiTRVO.UI.csproj" "EiTRVO.ProEngine/EiTRVO.ProEngine.csproj" "EiTRVO.Tests/EiTRVO.Tests.csproj" --verify-no-changes --verbosity minimal

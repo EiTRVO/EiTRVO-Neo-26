@@ -134,10 +134,10 @@ jobs:
           Select-String -Path $path -Pattern '(Version|BuildDate|VersionShort)'
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore "EiTRVO.UI/EiTRVO.UI.csproj"
 
       - name: Build in Release
-        run: dotnet build --no-restore -c Release -p:Version=${{ steps.version.outputs.version }} -p:ContinuousIntegrationBuild=true
+        run: dotnet build "EiTRVO.UI/EiTRVO.UI.csproj" --no-restore -c Release -p:Version=${{ steps.version.outputs.version }} -p:ContinuousIntegrationBuild=true
 
       - name: Publish (self-contained, ~196 MB)
         shell: pwsh
