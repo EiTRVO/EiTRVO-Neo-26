@@ -25,9 +25,11 @@ public static class JvmArgHelper
     /// <summary>需要从 version.json JVM 参数中阻止的危险标志（安全策略）。</summary>
     private static readonly string[] DangerousJvmArgPrefixes =
     {
-        "-javaagent:",     // JVM 代理 JAR 注入
-        "-agentlib:",      // 本机代理库注入
-        "-agentpath:",     // 本机代理路径注入
+        "-javaagent:",          // JVM 代理 JAR 注入
+        "-agentlib:",           // 本机代理库注入
+        "-agentpath:",          // 本机代理路径注入
+        "-XX:OnOutOfMemoryError",  // OOM 时执行任意命令
+        "-XX:OnError",             // 致命错误时执行任意命令
     };
 
     /// <summary>检查 JVM 参数是否被安全策略阻止（防止版本 JSON 中的恶意代理注入）。</summary>
