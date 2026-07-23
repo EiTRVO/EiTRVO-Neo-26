@@ -59,7 +59,17 @@ jobs:
           }
 
           Write-Host "Downloading HarmonyOS Sans from Huawei CDN..."
-          Invoke-WebRequest -Uri $fontUrl -OutFile $zipFile
+          $retries = 3
+          for ($i = 1; $i -le $retries; $i++) {
+              try {
+                  Invoke-WebRequest -Uri $fontUrl -OutFile $zipFile -ErrorAction Stop
+                  break
+              } catch {
+                  if ($i -eq $retries) { throw }
+                  Write-Host "Download attempt $i failed, retrying in 5s..."
+                  Start-Sleep -Seconds 5
+              }
+          }
 
           Expand-Archive -Path $zipFile -DestinationPath "$env:TEMP/HarmonyOS-Sans" -Force
           $scRegular = "$env:TEMP/HarmonyOS-Sans/HarmonyOS_SansSC/HarmonyOS_SansSC_Regular.ttf"
