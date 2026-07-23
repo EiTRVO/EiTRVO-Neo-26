@@ -28,9 +28,6 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Install WPF workload
-        run: dotnet workload install wpf
-
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
