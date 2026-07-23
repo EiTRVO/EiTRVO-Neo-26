@@ -163,6 +163,16 @@ public class SaveRecoveryFile
         byte[] ciphertext = new byte[remaining];
         fs.ReadExactly(ciphertext);
 
+        // Verify SHA-256 trailer
+        byte[] storedTrailerRec = new byte[TrailerSize];
+        fs.ReadExactly(storedTrailerRec);
+        fs.Position = 0;
+        byte[] trailerDataRec = new byte[fs.Length - TrailerSize];
+        await fs.ReadExactlyAsync(trailerDataRec, 0, trailerDataRec.Length);
+        byte[] computedTrailerRec = SHA256.HashData(trailerDataRec);
+        if (!storedTrailerRec.AsSpan().SequenceEqual(computedTrailerRec))
+            return null; // 文件损坏或被篡改
+
         // 2. 派生包裹密钥 K_ms（使用文件中存储的随机 salt）
         byte[] wrappingKey = DeriveWrappingKey(msUuid, salt);
 

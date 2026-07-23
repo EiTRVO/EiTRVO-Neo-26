@@ -344,6 +344,16 @@ public class SaveLockService
             progress?.Report((fileIndex, fileIndex));
         }
 
+        // Verify SHA-256 trailer
+        byte[] storedTrailer = new byte[TrailerSize];
+        fs.ReadExactly(storedTrailer);
+        fs.Position = 0;
+        byte[] trailerData = new byte[fs.Length - TrailerSize];
+        await fs.ReadExactlyAsync(trailerData, 0, trailerData.Length, ct);
+        byte[] computedTrailer = SHA256.HashData(trailerData);
+        if (!storedTrailer.AsSpan().SequenceEqual(computedTrailer))
+            throw new InvalidDataException("存档文件完整性校验失败——文件可能已被损坏或篡改。");
+
         if (deleteSavencAfter)
             File.Delete(savencPath);
     }
@@ -445,6 +455,16 @@ public class SaveLockService
 
             progress?.Report((fileIndex, fileIndex)); // 预读无法知道总数，用当前数报告
         }
+
+        // Verify SHA-256 trailer
+        byte[] storedTrailer2 = new byte[TrailerSize];
+        fs.ReadExactly(storedTrailer2);
+        fs.Position = 0;
+        byte[] trailerData2 = new byte[fs.Length - TrailerSize];
+        await fs.ReadExactlyAsync(trailerData2, 0, trailerData2.Length, ct);
+        byte[] computedTrailer2 = SHA256.HashData(trailerData2);
+        if (!storedTrailer2.AsSpan().SequenceEqual(computedTrailer2))
+            throw new InvalidDataException("存档文件完整性校验失败——文件可能已被损坏或篡改。");
 
         // 6. 删除 .savenc（如果需要）
         if (deleteSavencAfter)

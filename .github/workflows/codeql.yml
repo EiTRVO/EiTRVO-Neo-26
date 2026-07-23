@@ -1,0 +1,59 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '0 8 * * 0'  # Sundays at 08:00 UTC
+
+jobs:
+  analyze:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+
+      - name: Cache HarmonyOS Sans font
+        uses: actions/cache@v4
+        with:
+          path: EiTRVO.UI/font/Font.ttf
+          key: harmonyos-font-v2
+
+      - name: Acquire HarmonyOS Sans SC font
+        shell: pwsh
+        run: |
+          $fontDir  = "EiTRVO.UI/font"
+          $fontFile = "$fontDir/Font.ttf"
+          if (Test-Path $fontFile) { Write-Host "Font already present."; exit 0 }
+          $fontUrl = "https://developer.huawei.com/images/download/next/HarmonyOS-Sans-v2.zip"
+          $zipFile = "$env:TEMP/HarmonyOS-Sans.zip"
+          $retries = 3
+          for ($i = 1; $i -le $retries; $i++) {
+              try { Invoke-WebRequest -Uri $fontUrl -OutFile $zipFile -ErrorAction Stop; break }
+              catch { if ($i -eq $retries) { throw }; Start-Sleep -Seconds 5 }
+          }
+          Expand-Archive -Path $zipFile -DestinationPath "$env:TEMP/HarmonyOS-Sans" -Force
+          $scRegular = Get-ChildItem "$env:TEMP/HarmonyOS-Sans" -Recurse -Filter "HarmonyOS_SansSC_Regular.ttf" | Select-Object -First 1
+          if (-not $scRegular) {
+              $scRegular = Get-ChildItem "$env:TEMP/HarmonyOS-Sans" -Recurse -Filter "*SC*Regular*.ttf" | Select-Object -First 1
+          }
+          if (-not $scRegular) { throw "Cannot find HarmonyOS_SansSC_Regular.ttf in the zip" }
+          New-Item -Path $fontDir -ItemType Directory -Force | Out-Null
+          Copy-Item -Path $scRegular -Destination $fontFile
+
+      - name: Build
+        run: dotnet build "EiTRVO.UI/EiTRVO.UI.csproj" -c Release
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

@@ -235,7 +235,7 @@ public class DownloadService : IDownloadService
                                 try
                                 {
                                     // Use DownloadFileFastAsync for consistent per-file progress
-                                    await DownloadFileFastAsync(httpClient, url, dest, progress, hash, ct);
+                                    await DownloadFileFastAsync(httpClient, url, dest, progress, hash, ct, hash);
                                     downloaded = true;
                                     Interlocked.Increment(ref successCount);
                                     break;
