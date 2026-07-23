@@ -98,9 +98,15 @@ jobs:
           }
 
           Expand-Archive -Path $zipFile -DestinationPath "$env:TEMP/HarmonyOS-Sans" -Force
-          $scRegular = "$env:TEMP/HarmonyOS-Sans/HarmonyOS_SansSC/HarmonyOS_SansSC_Regular.ttf"
-          if (-not (Test-Path $scRegular)) {
-              throw "Cannot find HarmonyOS_SansSC_Regular.ttf in the zip (expected: $scRegular)"
+          $scRegular = Get-ChildItem "$env:TEMP/HarmonyOS-Sans" -Recurse -Filter "HarmonyOS_SansSC_Regular.ttf" | Select-Object -First 1
+          if (-not $scRegular) {
+              # Fallback: look for any SC Regular variant
+              $scRegular = Get-ChildItem "$env:TEMP/HarmonyOS-Sans" -Recurse -Filter "*SC*Regular*.ttf" | Select-Object -First 1
+          }
+          if (-not $scRegular) {
+              # List zip contents for debugging
+              Get-ChildItem "$env:TEMP/HarmonyOS-Sans" -Recurse -Filter "*.ttf" | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+              throw "Cannot find HarmonyOS_SansSC_Regular.ttf in the zip"
           }
 
           New-Item -Path $fontDir -ItemType Directory -Force | Out-Null
