@@ -121,6 +121,6 @@ jobs:
 
       - name: Check code formatting
         run: |
-          dotnet format "EiTRVO.UI/EiTRVO.UI.csproj" --verify-no-changes --verbosity minimal
-          dotnet format "EiTRVO.ProEngine/EiTRVO.ProEngine.csproj" --verify-no-changes --verbosity minimal
-          dotnet format "EiTRVO.Tests/EiTRVO.Tests.csproj" --verify-no-changes --verbosity minimal
+          dotnet format "EiTRVO.UI/EiTRVO.UI.csproj" whitespace --verify-no-changes --verbosity minimal
+          dotnet format "EiTRVO.ProEngine/EiTRVO.ProEngine.csproj" whitespace --verify-no-changes --verbosity minimal
+          dotnet format "EiTRVO.Tests/EiTRVO.Tests.csproj" whitespace --verify-no-changes --verbosity minimal

@@ -61,7 +61,7 @@ public class AuthService : IAuthService
 
         var deviceCodeJson = await deviceCodeResponse.Content.ReadAsStringAsync(cts.Token);
         if (!deviceCodeResponse.IsSuccessStatusCode)
-                throw new Exception($"获取设备代码失败（{deviceCodeResponse.StatusCode}）。");
+            throw new Exception($"获取设备代码失败（{deviceCodeResponse.StatusCode}）。");
 
         var deviceCode = JsonSerializer.Deserialize<DeviceCodeResponse>(deviceCodeJson)
             ?? throw new Exception("无法解析设备代码响应。");

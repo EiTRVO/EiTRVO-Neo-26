@@ -82,7 +82,8 @@ public class AccountViewModelTests : IDisposable
         _dialog.ConfirmResult = false;
         _accountManager.Add(new EiTRVO.ProEngine.Models.Account
         {
-            Username = "KeepMe", UUID = "uuid-keep",
+            Username = "KeepMe",
+            UUID = "uuid-keep",
             Type = EiTRVO.ProEngine.Models.AccountType.Microsoft
         });
 
@@ -101,7 +102,8 @@ public class AccountViewModelTests : IDisposable
         _dialog.ConfirmResult = true;
         _accountManager.Add(new EiTRVO.ProEngine.Models.Account
         {
-            Username = "RemoveMe", UUID = "uuid-rm",
+            Username = "RemoveMe",
+            UUID = "uuid-rm",
             Type = EiTRVO.ProEngine.Models.AccountType.Microsoft
         });
 

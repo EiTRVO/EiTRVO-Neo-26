@@ -326,9 +326,12 @@ public partial class ResourcePackViewModel : BaseViewModel
             {
                 ResourceSearchResults.Add(new ModDownloadEntry
                 {
-                    ProjectId = hit.ProjectId, Title = hit.Title,
-                    Description = hit.Description, Author = hit.Author,
-                    IconUrl = hit.IconUrl ?? "", Downloads = hit.Downloads,
+                    ProjectId = hit.ProjectId,
+                    Title = hit.Title,
+                    Description = hit.Description,
+                    Author = hit.Author,
+                    IconUrl = hit.IconUrl ?? "",
+                    Downloads = hit.Downloads,
                     IsCompatible = true
                 });
             }
@@ -438,9 +441,12 @@ public partial class ResourcePackViewModel : BaseViewModel
             {
                 ShaderSearchResults.Add(new ModDownloadEntry
                 {
-                    ProjectId = hit.ProjectId, Title = hit.Title,
-                    Description = hit.Description, Author = hit.Author,
-                    IconUrl = hit.IconUrl ?? "", Downloads = hit.Downloads,
+                    ProjectId = hit.ProjectId,
+                    Title = hit.Title,
+                    Description = hit.Description,
+                    Author = hit.Author,
+                    IconUrl = hit.IconUrl ?? "",
+                    Downloads = hit.Downloads,
                     IsCompatible = true
                 });
             }

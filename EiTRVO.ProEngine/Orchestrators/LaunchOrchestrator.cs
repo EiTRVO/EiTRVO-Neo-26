@@ -300,8 +300,11 @@ public class LaunchOrchestrator
                 _notificationService.AppendLog(
                     $"安全错误：启动时检测到被禁主类「{mainClass}」，已拒绝启动。",
                     NotificationType.Error);
-                return new LaunchResult { Success = false,
-                    ErrorMessage = $"mainClass（{mainClass}）为被禁用的 JRE 内部类，已拒绝启动。" };
+                return new LaunchResult
+                {
+                    Success = false,
+                    ErrorMessage = $"mainClass（{mainClass}）为被禁用的 JRE 内部类，已拒绝启动。"
+                };
             }
             if (!JvmArgHelper.IsMainClassSafe(mainClass))
             {

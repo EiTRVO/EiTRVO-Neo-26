@@ -28,9 +28,9 @@ public class ModrinthService : IModrinthService
     /// <summary>Choose chunk count based on file size. Larger files benefit from more parallelism.</summary>
     private static int GetChunkCount(long totalBytes) => totalBytes switch
     {
-        < 16 * 1024 * 1024  => 4,   //  4-16 MB:  4 chunks (~4 MB each)
-        < 50 * 1024 * 1024  => 6,   // 16-50 MB:  6 chunks (~8 MB each)
-        _                    => MaxChunkCount,  // 50+ MB:    8 chunks (~6+ MB each)
+        < 16 * 1024 * 1024 => 4,   //  4-16 MB:  4 chunks (~4 MB each)
+        < 50 * 1024 * 1024 => 6,   // 16-50 MB:  6 chunks (~8 MB each)
+        _ => MaxChunkCount,  // 50+ MB:    8 chunks (~6+ MB each)
     };
 
     /// <summary>Represents a single file to download in the dependency chain.</summary>

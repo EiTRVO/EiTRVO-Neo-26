@@ -249,7 +249,8 @@ namespace EiTRVO.UI
                             try
                             {
                                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
-                                    "https://www.minecraft.net") { UseShellExecute = true });
+                                    "https://www.minecraft.net")
+                                { UseShellExecute = true });
                             }
                             catch { }
                         }
