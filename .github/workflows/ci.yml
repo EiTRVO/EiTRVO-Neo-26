@@ -120,4 +120,7 @@ jobs:
           dotnet list "EiTRVO.Tests/EiTRVO.Tests.csproj" package --vulnerable
 
       - name: Check code formatting
-        run: dotnet format "EiTRVO.UI/EiTRVO.UI.csproj" "EiTRVO.ProEngine/EiTRVO.ProEngine.csproj" "EiTRVO.Tests/EiTRVO.Tests.csproj" --verify-no-changes --verbosity minimal
+        run: |
+          dotnet format "EiTRVO.UI/EiTRVO.UI.csproj" --verify-no-changes --verbosity minimal
+          dotnet format "EiTRVO.ProEngine/EiTRVO.ProEngine.csproj" --verify-no-changes --verbosity minimal
+          dotnet format "EiTRVO.Tests/EiTRVO.Tests.csproj" --verify-no-changes --verbosity minimal
