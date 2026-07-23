@@ -114,6 +114,8 @@ jobs:
           path: "TestResults/"
           retention-days: 14
 
+      - name: Check NuGet packages for vulnerabilities
+        run: dotnet list package --vulnerable
+
       - name: Check code formatting
-        continue-on-error: true
         run: dotnet format "EiTRVO.UI/EiTRVO.UI.csproj" "EiTRVO.ProEngine/EiTRVO.ProEngine.csproj" "EiTRVO.Tests/EiTRVO.Tests.csproj" --verify-no-changes --verbosity minimal
