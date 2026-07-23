@@ -102,7 +102,7 @@ jobs:
         if: success() || failure()
         with:
           name: MSTest Results
-          path: "${{ github.workspace }}/TestResults/*.trx"
+          path: "TestResults/*.trx"
           reporter: dotnet-trx
           fail-on-error: true
 
