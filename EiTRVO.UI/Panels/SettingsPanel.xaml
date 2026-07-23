@@ -157,6 +157,27 @@
                                           FontSize="12"
                                           Foreground="{DynamicResource TextPrimary}"
                                           IsChecked="{Binding FirewallEnabled, Mode=TwoWay}"/>
+                                <!-- 防护模式选择（仅防火墙启用时可见） -->
+                                <StackPanel Margin="16,8,0,0"
+                                            Visibility="{Binding IsAdvancedDefenseAvailable, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <TextBlock FontSize="11" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6">
+                                        <Run Text="防护模式"/>
+                                    </TextBlock>
+                                    <RadioButton x:Name="rbStandardDefense"
+                                                 GroupName="DefenseMode"
+                                                 Content="标准防御"
+                                                 FontSize="12"
+                                                 Foreground="{DynamicResource TextPrimary}"
+                                                 IsChecked="{Binding AdvancedDefenseEnabled, Mode=TwoWay, Converter={StaticResource BoolInvertConverter}}"
+                                                 Margin="0,2"/>
+                                    <RadioButton x:Name="rbAdvancedDefense"
+                                                 GroupName="DefenseMode"
+                                                 Content="高级防御"
+                                                 FontSize="12"
+                                                 Foreground="{DynamicResource TextPrimary}"
+                                                 IsChecked="{Binding AdvancedDefenseEnabled, Mode=TwoWay}"
+                                                 Margin="0,2"/>
+                                </StackPanel>
                                 <TextBlock FontSize="10"
                                            Foreground="{DynamicResource TextMuted}"
                                            TextWrapping="Wrap" Margin="0,6,0,0">
@@ -169,6 +190,24 @@
                                     <Run Text="3. 监控并阻止游戏进程调用系统高危程序（cmd.exe, powershell.exe 等 30 项）。"/>
                                     <LineBreak/>
                                     <Run Text="检测到危险调用时自动终止游戏进程并弹出警告。如游戏出现异常可关闭此功能。" Foreground="{DynamicResource TextSecondary}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="10"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           TextWrapping="Wrap" Margin="0,4,0,0"
+                                           Visibility="{Binding AdvancedDefenseEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Run Text="─────────────────────────────"/>
+                                    <LineBreak/>
+                                    <Run Text="◆ 高级防御额外提供："/>
+                                    <LineBreak/>
+                                    <Run Text="4. 文件系统监控 — 检测并阻止游戏释放可疑可执行文件；"/>
+                                    <LineBreak/>
+                                    <Run Text="5. DLL 加载监控 — 记录非标准模块加载用于安全审计；"/>
+                                    <LineBreak/>
+                                    <Run Text="6. TCP 连接监控 — 记录非标准端口连接用于安全审计；"/>
+                                    <LineBreak/>
+                                    <Run Text="高级模式的 DLL/网络监控仅记录证据不自动处置，完整保留攻击链信息供安全软件分析。"/>
+                                    <LineBreak/>
+                                    <Run Text="─────────────────────────────"/>
                                 </TextBlock>
                             </StackPanel>
                         </GroupBox>

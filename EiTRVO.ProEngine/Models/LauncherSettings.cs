@@ -25,6 +25,9 @@ public class LauncherSettings
     /// <summary>启动游戏时启用进程加固 + 子进程黑名单监控</summary>
     public bool FirewallEnabled { get; set; } = false;
 
+    /// <summary>高级防御模式：在标准防御基础上增加文件系统监控 + DLL 加载监控 + TCP 连接监控</summary>
+    public bool AdvancedDefenseEnabled { get; set; } = false;
+
     // === 备份 ===
     /// <summary>启用自动备份（启动器启动时检查）</summary>
     public bool BackupEnabled { get; set; } = false;

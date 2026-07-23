@@ -190,6 +190,7 @@ namespace EiTRVO.UI
 
             // EiTRVO Firewall: 注入开关状态
             _launchOrchestrator.FirewallEnabledProvider = () => _settings.FirewallEnabled;
+            _launchOrchestrator.AdvancedDefenseEnabledProvider = () => _settings.AdvancedDefenseEnabled;
 
             // Mods 完整性校验：注入未收录 Mod 警告回调
             _launchOrchestrator.ModsWarningHandler = (unknownFiles) =>
@@ -317,6 +318,10 @@ namespace EiTRVO.UI
                         break;
                     case nameof(SettingsViewModel.FirewallEnabled):
                         _settings.FirewallEnabled = _settingsVm.FirewallEnabled;
+                        SaveSettingsFromVm();
+                        break;
+                    case nameof(SettingsViewModel.AdvancedDefenseEnabled):
+                        _settings.AdvancedDefenseEnabled = _settingsVm.AdvancedDefenseEnabled;
                         SaveSettingsFromVm();
                         break;
                     case nameof(SettingsViewModel.BackupEnabled):

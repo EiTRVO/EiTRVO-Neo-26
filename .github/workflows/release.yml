@@ -1,0 +1,199 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 26.0.1007.0)'
+        required: true
+        type: string
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = ""
+          if ("${{ github.event_name }}" -eq "push") {
+              $tag = "${{ github.ref_name }}"
+              $version = $tag.TrimStart('v')
+          } else {
+              $version = "${{ inputs.version }}"
+              $tag = "v$version"
+          }
+
+          # Validate version format strictly to prevent injection
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$') {
+              throw "Invalid version format: '$version'. Expected: N.N.N.N (e.g. 26.0.1007.0)"
+          }
+
+          Write-Host "Version: $version, Tag: $tag"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install WPF workload
+        run: dotnet workload install wpf
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-release-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-release-
+            nuget-${{ runner.os }}-
+
+      - name: Cache HarmonyOS Sans font
+        uses: actions/cache@v4
+        with:
+          path: EiTRVO.UI/font/Font.ttf
+          key: harmonyos-font-v2
+
+      - name: Acquire HarmonyOS Sans SC font
+        shell: pwsh
+        run: |
+          $fontDir  = "EiTRVO.UI/font"
+          $fontFile = "$fontDir/Font.ttf"
+          $fontUrl  = "https://developer.huawei.com/images/download/next/HarmonyOS-Sans-v2.zip"
+          $zipFile  = "$env:TEMP/HarmonyOS-Sans.zip"
+
+          if (Test-Path $fontFile) {
+              Write-Host "Font.ttf already present, skipping download."
+              exit 0
+          }
+
+          Write-Host "Downloading HarmonyOS Sans from Huawei CDN..."
+          Invoke-WebRequest -Uri $fontUrl -OutFile $zipFile
+
+          Expand-Archive -Path $zipFile -DestinationPath "$env:TEMP/HarmonyOS-Sans" -Force
+          $scRegular = "$env:TEMP/HarmonyOS-Sans/HarmonyOS_SansSC/HarmonyOS_SansSC_Regular.ttf"
+          if (-not (Test-Path $scRegular)) {
+              throw "Cannot find HarmonyOS_SansSC_Regular.ttf in the zip (expected: $scRegular)"
+          }
+
+          New-Item -Path $fontDir -ItemType Directory -Force | Out-Null
+          Copy-Item -Path $scRegular -Destination $fontFile
+          Write-Host "Font acquired: HarmonyOS_SansSC_Regular.ttf -> $fontFile"
+
+      - name: Update AppInfo.cs with version
+        shell: pwsh
+        run: |
+          $path   = "EiTRVO.ProEngine/Models/AppInfo.cs"
+          $ver    = "${{ steps.version.outputs.version }}"
+          $parts  = $ver.Split('.')
+          $short  = "$($parts[1]).$($parts[2])"
+          $date   = (Get-Date).ToString("yyyy年M月")
+
+          $content = Get-Content $path -Raw
+          $content = $content -replace 'public const string Version = ".*";',
+                                        "public const string Version = ""$ver"";"
+          $content = $content -replace 'public const string VersionShort = ".*";',
+                                        "public const string VersionShort = ""$short"";"
+          $content = $content -replace 'public const string BuildDate = ".*";',
+                                        "public const string BuildDate = ""$date (CI)"";"
+          Set-Content -Path $path -Value $content -NoNewline
+          Write-Host "Updated AppInfo.cs:"
+          Select-String -Path $path -Pattern '(Version|BuildDate|VersionShort)'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build in Release
+        run: dotnet build --no-restore -c Release -p:Version=${{ steps.version.outputs.version }} -p:ContinuousIntegrationBuild=true
+
+      - name: Publish (self-contained, ~196 MB)
+        shell: pwsh
+        run: |
+          dotnet publish "EiTRVO.UI/EiTRVO.UI.csproj" `
+            --no-build -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:DebugType=embedded `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:IncludeAllContentForSelfExtract=true `
+            -o "${{ github.workspace }}/artifacts/selfcontained"
+
+      - name: Compress self-contained artifact
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "${{ github.workspace }}/artifacts/selfcontained/*" `
+            -DestinationPath "${{ github.workspace }}/artifacts/EiTRVO-Neo-${{ steps.version.outputs.version }}-win-x64-selfcontained.zip"
+
+      - name: Publish (framework-dependent, ~35 MB)
+        shell: pwsh
+        run: |
+          dotnet publish "EiTRVO.UI/EiTRVO.UI.csproj" `
+            --no-build -c Release `
+            -r win-x64 `
+            --self-contained false `
+            -p:PublishSingleFile=true `
+            -p:DebugType=embedded `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:IncludeAllContentForSelfExtract=true `
+            -o "${{ github.workspace }}/artifacts/fd"
+
+      - name: Compress framework-dependent artifact
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "${{ github.workspace }}/artifacts/fd/*" `
+            -DestinationPath "${{ github.workspace }}/artifacts/EiTRVO-Neo-${{ steps.version.outputs.version }}-win-x64-fd.zip"
+
+      - name: Generate release notes
+        id: release_notes
+        uses: mikepenz/release-changelog-builder-action@v5
+        with:
+          configuration: |
+            {
+              "template": "# EiTRVO Neo ${{ steps.version.outputs.version }}\n\n$CHANGES$",
+              "categories": [
+                {"title": "## Breaking Changes", "labels": ["breaking"]},
+                {"title": "## New Features", "labels": ["enhancement", "feature"]},
+                {"title": "## Bug Fixes", "labels": ["fix", "bug"]},
+                {"title": "## Security Improvements", "labels": ["security"]},
+                {"title": "## Other Changes", "labels": ["*"]}
+              ]
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "EiTRVO Neo ${{ steps.version.outputs.version }}"
+          body: ${{ steps.release_notes.outputs.changelog }}
+          draft: false
+          prerelease: false
+          files: |
+            ${{ github.workspace }}/artifacts/EiTRVO-Neo-${{ steps.version.outputs.version }}-win-x64-selfcontained.zip
+            ${{ github.workspace }}/artifacts/EiTRVO-Neo-${{ steps.version.outputs.version }}-win-x64-fd.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

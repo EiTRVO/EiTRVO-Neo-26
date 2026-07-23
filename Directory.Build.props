@@ -4,5 +4,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WindowsSdkPackageVersion>10.0.18362.56</WindowsSdkPackageVersion>
   </PropertyGroup>
 </Project>

@@ -61,6 +61,9 @@ public class LaunchOrchestrator
     /// <summary>UI 回调 — 读取 Firewall 开关状态。由 MainWindow 注入。</summary>
     public Func<bool>? FirewallEnabledProvider { get; set; }
 
+    /// <summary>UI 回调 — 读取高级防御开关状态。由 MainWindow 注入。</summary>
+    public Func<bool>? AdvancedDefenseEnabledProvider { get; set; }
+
     /// <summary>UI 回调 — Mods 完整性校验警告。参数为未在 Modrinth 收录的文件名列表，返回 true=用户确认继续。</summary>
     public Func<List<string>, Task<bool>>? ModsWarningHandler { get; set; }
 
@@ -139,6 +142,7 @@ public class LaunchOrchestrator
 
     public void DisposeGameResources()
     {
+        _gameSecurity?.StopAdvancedMonitoring();
         _gameSecurity?.StopMonitoring();
         _gameCts?.Cancel();
         _gameCts?.Dispose();
@@ -772,30 +776,49 @@ public class LaunchOrchestrator
 
     private async Task RunGameProcessAsync(JavaInfo javaInfo, List<string> args, string? workingDirectory = null)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = javaInfo.Path,
-            WorkingDirectory = workingDirectory ?? _gameFolder.GameDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        foreach (var arg in args)
-            psi.ArgumentList.Add(arg);
-
         // Clean up any previous process before starting a new one
         if (_gameCts != null) { _gameCts.Cancel(); _gameCts.Dispose(); }
         if (_gameProcess != null) { try { _gameProcess.Kill(); } catch { } _gameProcess.Dispose(); }
 
-        _gameCts = new CancellationTokenSource();
-        _gameProcess = Process.Start(psi) ?? throw new Exception("无法启动 Java 进程。");
-
-        // === EiTRVO Firewall ===
         bool firewallEnabled = FirewallEnabledProvider?.Invoke() ?? false;
+        string workDir = workingDirectory ?? _gameFolder.GameDir;
+
+        // === 进程创建路径选择 ===
+        HardenedProcessHandle? handle = null;
+        StreamReader? stdoutReader = null;
+        StreamReader? stderrReader = null;
+
         if (_gameSecurity != null && firewallEnabled)
         {
-            _gameSecurity.HardenProcess(_gameProcess);
+            // === 加固路径：CREATE_SUSPENDED → Layer 0/1/2 → ResumeThread ===
+            handle = _gameSecurity.StartSuspendedAndHarden(javaInfo.Path, args, workDir);
+            _gameProcess = handle.Process;
+            stdoutReader = handle.StandardOutput;
+            stderrReader = handle.StandardError;
+        }
+        else
+        {
+            // === 原有路径：Process.Start ===
+            var psi = new ProcessStartInfo
+            {
+                FileName = javaInfo.Path,
+                WorkingDirectory = workDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (var arg in args)
+                psi.ArgumentList.Add(arg);
+
+            _gameProcess = Process.Start(psi) ?? throw new Exception("无法启动 Java 进程。");
+        }
+
+        _gameCts = new CancellationTokenSource();
+
+        // === EiTRVO Firewall Layer 3 (WMI 监控) ===
+        if (_gameSecurity != null && firewallEnabled)
+        {
             _gameSecurity.StartMonitoring(_gameProcess, (processName, pid, commandLine) =>
             {
                 var cmdInfo = commandLine != null ? $"\n命令行：{commandLine}" : "";
@@ -813,72 +836,107 @@ public class LaunchOrchestrator
                 KillGame();
             });
         }
-        // === 原有逻辑继续 ===
 
-        var token = _gameCts.Token;
-
-        // Capture last 20 lines of stderr for diagnostics on non-zero exit
-        var stderrQueue = new System.Collections.Concurrent.ConcurrentQueue<string?>();
-        var stderrSb = new System.Text.StringBuilder();
-
-        _ = Task.Run(async () =>
+        // === EiTRVO Firewall Layer 4 + 5 (高级防御) ===
+        bool advancedDefense = firewallEnabled && (AdvancedDefenseEnabledProvider?.Invoke() ?? false);
+        if (_gameSecurity != null && advancedDefense)
         {
-            try
-            {
-                while (!_gameProcess.HasExited && !token.IsCancellationRequested)
+            string javaHome = Path.GetDirectoryName(javaInfo.Path) ?? javaInfo.Path;
+            _gameSecurity.StartAdvancedMonitoring(
+                _gameProcess, workDir, javaHome,
+                onLayer4Threat: (fileName, details) =>
                 {
-                    await _gameProcess.StandardOutput.ReadLineAsync();
-                    // Game stdout is consumed silently; launcher events use Show/AppendLog
-                }
-            }
-            catch { }
-        });
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                while (!_gameProcess.HasExited && !token.IsCancellationRequested)
+                    _notificationService.Show(
+                        $"EiTRVO 高级防御：检测到可疑文件行为\n\n{details}",
+                        NotificationType.Warning);
+                    _notificationService.WriteDiagnosticLog(
+                        "EiTRVO 高级防御 - 文件系统威胁",
+                        $"文件名：{fileName}\n{details}");
+                },
+                onLayer5Alert: (title, details) =>
                 {
-                    string? line = await _gameProcess.StandardError.ReadLineAsync();
-                    if (line != null)
-                    {
-                        stderrQueue.Enqueue(line);
-                        while (stderrQueue.Count > 20) stderrQueue.TryDequeue(out _);
-                        stderrSb.AppendLine(line);
-                    }
-                }
-            }
-            catch { }
-        });
-
-        var gameStartTime = DateTimeOffset.UtcNow;
-        await _gameProcess.WaitForExitAsync(token);
-
-        if (_gameProcess.ExitCode != 0)
-        {
-            // Collect last lines from ring buffer
-            var lastLines = new System.Text.StringBuilder();
-            foreach (string? line in stderrQueue)
-            {
-                if (line != null)
-                    lastLines.AppendLine(line);
-            }
-            string tail = lastLines.ToString().Trim();
-            if (tail.Length > 1200)
-                tail = tail[^1200..];
-
-            throw new Exception($"退出码: {_gameProcess.ExitCode}\n" +
-                $"实例：{_lastLaunchInstanceName}\n" +
-                $"版本：{_lastLaunchVersionId}\n" +
-                $"Java：{_lastLaunchJavaPath}" +
-                (tail.Length > 0 ? $"\n\n--- stderr 尾部 ---\n{tail}" : ""));
+                    _notificationService.AppendLog(
+                        $"[高级防御] {title}: {details.Replace("\n", " | ")}",
+                        NotificationType.Warning);
+                    _notificationService.WriteDiagnosticLog(
+                        $"EiTRVO 高级防御 - {title}",
+                        details);
+                });
         }
 
-        // === 游戏时长统计：仅记录正常退出（ExitCode == 0）且超过 30 秒的会话 ===
-        var elapsedSeconds = (long)(DateTimeOffset.UtcNow - gameStartTime).TotalSeconds;
-        if (elapsedSeconds >= 30)
-            RecordPlayTime(_lastLaunchInstanceName!, elapsedSeconds, DateTimeOffset.UtcNow);
+        try
+        {
+            var token = _gameCts.Token;
+
+            // Capture last 20 lines of stderr for diagnostics on non-zero exit
+            var stderrQueue = new System.Collections.Concurrent.ConcurrentQueue<string?>();
+
+            // stdout reader: prefer hardened handle, fall back to Process.StandardOutput
+            var stdoutRdr = stdoutReader ?? _gameProcess.StandardOutput;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!_gameProcess.HasExited && !token.IsCancellationRequested)
+                    {
+                        await stdoutRdr.ReadLineAsync();
+                        // Game stdout is consumed silently; launcher events use Show/AppendLog
+                    }
+                }
+                catch { }
+            });
+
+            // stderr reader: prefer hardened handle, fall back to Process.StandardError
+            var stderrRdr = stderrReader ?? _gameProcess.StandardError;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!_gameProcess.HasExited && !token.IsCancellationRequested)
+                    {
+                        string? line = await stderrRdr.ReadLineAsync();
+                        if (line != null)
+                        {
+                            stderrQueue.Enqueue(line);
+                            while (stderrQueue.Count > 20) stderrQueue.TryDequeue(out _);
+                        }
+                    }
+                }
+                catch { }
+            });
+
+            var gameStartTime = DateTimeOffset.UtcNow;
+            await _gameProcess.WaitForExitAsync(token);
+
+            if (_gameProcess.ExitCode != 0)
+            {
+                // Collect last lines from ring buffer
+                var lastLines = new System.Text.StringBuilder();
+                foreach (string? line in stderrQueue)
+                {
+                    if (line != null)
+                        lastLines.AppendLine(line);
+                }
+                string tail = lastLines.ToString().Trim();
+                if (tail.Length > 1200)
+                    tail = tail[^1200..];
+
+                throw new Exception($"退出码: {_gameProcess.ExitCode}\n" +
+                    $"实例：{_lastLaunchInstanceName}\n" +
+                    $"版本：{_lastLaunchVersionId}\n" +
+                    $"Java：{_lastLaunchJavaPath}" +
+                    (tail.Length > 0 ? $"\n\n--- stderr 尾部 ---\n{tail}" : ""));
+            }
+
+            // === 游戏时长统计：仅记录正常退出（ExitCode == 0）且超过 30 秒的会话 ===
+            var elapsedSeconds = (long)(DateTimeOffset.UtcNow - gameStartTime).TotalSeconds;
+            if (elapsedSeconds >= 30)
+                RecordPlayTime(_lastLaunchInstanceName!, elapsedSeconds, DateTimeOffset.UtcNow);
+        }
+        finally
+        {
+            handle?.Dispose();
+        }
     }
 
     // ==================== Play Time Tracking ====================

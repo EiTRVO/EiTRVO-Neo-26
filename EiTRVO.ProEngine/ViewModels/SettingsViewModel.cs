@@ -59,6 +59,12 @@ public partial class SettingsViewModel : BaseViewModel
     [ObservableProperty]
     private bool _firewallEnabled;
 
+    [ObservableProperty]
+    private bool _advancedDefenseEnabled;
+
+    /// <summary>高级防御仅当防火墙启用时可选。</summary>
+    public bool IsAdvancedDefenseAvailable => FirewallEnabled;
+
     // === 备份 ===
     [ObservableProperty]
     private bool _backupEnabled;
@@ -145,6 +151,13 @@ public partial class SettingsViewModel : BaseViewModel
         IsCustomResolution = value == "自定义";
     }
 
+    partial void OnFirewallEnabledChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsAdvancedDefenseAvailable));
+        if (!value)
+            AdvancedDefenseEnabled = false; // 关闭防火墙时自动取消高级防御
+    }
+
     partial void OnMemoryChanged(int value)
     {
         MemoryText = value.ToString();
@@ -185,6 +198,7 @@ public partial class SettingsViewModel : BaseViewModel
         ManualJavaPath = settings.ManualJavaPath;
         SettingsLockEnabled = settings.SettingsLockEnabled;
         FirewallEnabled = settings.FirewallEnabled;
+        AdvancedDefenseEnabled = settings.AdvancedDefenseEnabled;
         BackupEnabled = settings.BackupEnabled;
         BackupInterval = settings.BackupInterval;
         BackupFolder = settings.BackupFolder;
@@ -205,6 +219,7 @@ public partial class SettingsViewModel : BaseViewModel
             ManualJavaPath = ManualJavaPath,
             SettingsLockEnabled = SettingsLockEnabled,
             FirewallEnabled = FirewallEnabled,
+            AdvancedDefenseEnabled = AdvancedDefenseEnabled,
             BackupEnabled = BackupEnabled,
             BackupInterval = BackupInterval,
             BackupFolder = BackupFolder,

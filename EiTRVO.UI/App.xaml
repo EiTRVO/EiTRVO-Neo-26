@@ -9,7 +9,7 @@
                 <ResourceDictionary Source="Themes/DarkTheme.xaml"/>
                 <ResourceDictionary Source="Themes/DataTemplates.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <FontFamily x:Key="CustomFont">/font/Font.ttf#HarmonyOS Sans SC</FontFamily>
+            <FontFamily x:Key="CustomFont">/font/Font.ttf#鸿蒙黑体</FontFamily>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
