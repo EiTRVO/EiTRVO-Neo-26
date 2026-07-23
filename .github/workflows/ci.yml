@@ -115,7 +115,9 @@ jobs:
           retention-days: 14
 
       - name: Check NuGet packages for vulnerabilities
-        run: dotnet list package --vulnerable
+        run: |
+          dotnet list "EiTRVO.UI/EiTRVO.UI.csproj" package --vulnerable
+          dotnet list "EiTRVO.Tests/EiTRVO.Tests.csproj" package --vulnerable
 
       - name: Check code formatting
         run: dotnet format "EiTRVO.UI/EiTRVO.UI.csproj" "EiTRVO.ProEngine/EiTRVO.ProEngine.csproj" "EiTRVO.Tests/EiTRVO.Tests.csproj" --verify-no-changes --verbosity minimal
