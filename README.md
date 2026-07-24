@@ -32,15 +32,27 @@
 - 启动流程中无缝集成解密/重加密
 
 ### EiTRVO Firewall 进程安全
-三层防护体系阻止游戏子进程执行危险操作：
+
+五层纵深防护体系，从进程创建到运行时全程保护：
 
 | 层级 | 机制 | 功能 |
 |------|------|------|
+| Layer 0 | `EXTENSION_POINT_DISABLE_ALWAYS_ON` | 禁用 Windows 进程扩展点，阻止第三方 DLL 注入 |
 | Layer 1 | `AdjustTokenPrivileges` | 移除 9 项非必需特权（含 `SeDebugPrivilege` 纵深防御） |
 | Layer 2 | Windows Job Object | `KILL_ON_JOB_CLOSE` + 50 进程上限 |
-| Layer 3 | WMI `Win32_ProcessStartTrace` | 子进程黑名单实时监控 |
+| Layer 3 | WMI `Win32_ProcessStartTrace` | 子进程黑名单实时监控（31 项危险进程） |
+| Layer 4 | `FileSystemWatcher` × 3 | 游戏目录 / %TEMP% / 启动文件夹 — 检测可执行文件创建并自动删除 |
+| Layer 5 | DLL 白名单 + TCP 连接轮询 | 每 2s 检测非白名单模块加载；每 5s 检测非标准端口连接 |
 
-黑名单覆盖 31 项危险进程（`cmd.exe`、`powershell.exe`、`mshta.exe`、`rundll32.exe`、`reg.exe`、`curl.exe`、`certutil.exe`、`schtasks.exe`、`bcdedit.exe` 等），检测到即刻终止进程并触发保护。
+**Layer 0–2 原子化实施：** 使用 `CREATE_SUSPENDED` 创建游戏进程，在挂起态完成扩展点禁用 → 特权移除 → Job Object 绑定，恢复执行前全部防护已就位，消除 `Process.Start` → `HardenProcess` 之间的竞态窗口。
+
+**Layer 3** 黑名单覆盖 31 项危险进程（`cmd.exe`、`powershell.exe`、`pwsh.exe`、`mshta.exe`、`rundll32.exe`、`reg.exe`、`curl.exe`、`certutil.exe`、`schtasks.exe`、`bcdedit.exe`、`diskpart.exe`、`wevtutil.exe`、`vssadmin.exe`、`icacls.exe` 等），检测到即刻终止进程并捕获命令行，触发告警。
+
+**Layer 4** 三层 `FileSystemWatcher` 监控文件系统：游戏 `.minecraft` 目录（递归，排除 `mods/` 和 `.jar`/`.class`）、`%TEMP%`（非递归）、启动文件夹。检测到 `.exe`/`.bat`/`.cmd`/`.ps1`/`.vbs`/`.js`/`.wsf`/`.scr`/`.msi` 等可执行文件创建时告警，游戏目录和启动文件夹中的文件自动删除以阻止持久化。
+
+**Layer 5a** — 每 2 秒通过 `CreateToolhelp32Snapshot` 枚举游戏进程已加载模块，白名单放行 Java 运行时、Windows 系统目录、GPU 驱动、LWJGL natives、.NET/VC++ 运行时。非白名单 DLL 加载时记录告警。
+
+**Layer 5b** — 每 5 秒通过 `GetExtendedTcpTable` 枚举游戏进程 TCP 连接，仅放行 Minecraft 默认端口（25565）和 HTTPS（443），非标准端口连接记录告警。
 
 ### 启动安全（JVM 参数 + mainClass）
 
