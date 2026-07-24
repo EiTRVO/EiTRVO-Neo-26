@@ -83,7 +83,7 @@ public class DownloadServiceTests : IDisposable
         var http = CreateFakeHttpClient(HttpStatusCode.OK, "test file content");
         var destPath = Path.Combine(_tempDir, "downloaded.txt");
 
-        await _service.DownloadFileWithRetryAsync(http, "https://example.com/file.txt",
+        await _service.DownloadFileWithRetryAsync(http, "https://cdn.modrinth.com/file.txt",
             destPath, maxRetries: 1);
 
         Assert.IsTrue(File.Exists(destPath));
