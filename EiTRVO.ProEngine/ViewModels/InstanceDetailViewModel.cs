@@ -457,8 +457,11 @@ public partial class InstanceDetailViewModel : BaseViewModel
                 : entry.FullName.Substring(stripPrefix.Length);
             if (string.IsNullOrEmpty(relativePath)) continue;
 
-            string destPath = Path.Combine(destDir, relativePath);
-            PathSafetyHelper.ValidateContained(destPath, destDir);
+            string destPath = Path.GetFullPath(Path.Combine(destDir, relativePath));
+            string fullBase = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar);
+            if (!destPath.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(destPath, fullBase, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("路径穿越检测");
 
             if (entry.FullName.EndsWith("/"))
             {

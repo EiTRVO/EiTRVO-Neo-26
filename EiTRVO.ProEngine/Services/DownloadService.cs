@@ -385,8 +385,11 @@ public class DownloadService : IDownloadService
         foreach (var entry in archive.Entries)
         {
             if (entry.FullName.StartsWith("META-INF", StringComparison.OrdinalIgnoreCase)) continue;
-            string target = Path.Combine(destDir, entry.FullName);
-            PathSafetyHelper.ValidateContained(target, destDir);
+            string target = Path.GetFullPath(Path.Combine(destDir, entry.FullName));
+            string fullBase = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar);
+            if (!target.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(target, fullBase, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("路径穿越检测");
             if (entry.FullName.EndsWith("/") || entry.FullName.EndsWith("\\"))
                 Directory.CreateDirectory(target);
             else
