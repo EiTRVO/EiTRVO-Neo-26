@@ -178,7 +178,7 @@ jobs:
 
       - name: Generate release notes
         id: release_notes
-        uses: mikepenz/release-changelog-builder-action@v5
+        uses: mikepenz/release-changelog-builder-action@v6
         with:
           configuration: |
             {
