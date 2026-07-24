@@ -8,3 +8,21 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+    groups:
+      microsoft:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+      xunit:
+        patterns:
+          - "xunit*"
+          - "coverlet*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - ci

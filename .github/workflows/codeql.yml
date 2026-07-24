@@ -20,9 +20,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: csharp
+          queries: security-extended
 
       - name: Cache HarmonyOS Sans font
         uses: actions/cache@v4
@@ -52,8 +53,11 @@ jobs:
           New-Item -Path $fontDir -ItemType Directory -Force | Out-Null
           Copy-Item -Path $scRegular -Destination $fontFile
 
-      - name: Build
-        run: dotnet build "EiTRVO.UI/EiTRVO.UI.csproj" -c Release
+      - name: Build all projects
+        run: |
+          dotnet build "EiTRVO.UI/EiTRVO.UI.csproj" -c Release
+          dotnet build "EiTRVO.ProEngine/EiTRVO.ProEngine.csproj" -c Release
+          dotnet build "EiTRVO.Tests/EiTRVO.Tests.csproj" -c Release
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
