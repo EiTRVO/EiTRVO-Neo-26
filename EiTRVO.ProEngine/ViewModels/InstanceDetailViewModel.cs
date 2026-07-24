@@ -433,7 +433,9 @@ public partial class InstanceDetailViewModel : BaseViewModel
             saveFolderName = Path.GetFileNameWithoutExtension(zipPath);
         }
 
-        saveFolderName = PathSafetyHelper.SanitizeNameComponent(saveFolderName);
+        saveFolderName = Path.GetFileName(saveFolderName.Trim());
+        if (string.IsNullOrEmpty(saveFolderName))
+            saveFolderName = "unnamed";
 
         string destDir = Path.Combine(SavesFolder, saveFolderName);
         if (Directory.Exists(destDir))
@@ -458,9 +460,8 @@ public partial class InstanceDetailViewModel : BaseViewModel
             if (string.IsNullOrEmpty(relativePath)) continue;
 
             string destPath = Path.GetFullPath(Path.Combine(destDir, relativePath));
-            string fullBase = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar);
-            if (!destPath.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(destPath, fullBase, StringComparison.OrdinalIgnoreCase))
+            if (!destPath.StartsWith(Path.GetFullPath(destDir) + Path.DirectorySeparatorChar))
+                throw new InvalidDataException("路径穿越检测");
                 throw new InvalidDataException("路径穿越检测");
 
             if (entry.FullName.EndsWith("/"))
