@@ -20,6 +20,7 @@ public static class DownloadSafetyHelper
         // Mojang / Microsoft CDN
         "launchermeta.mojang.com",
         "piston-meta.mojang.com",
+        "piston-data.mojang.com",
         "resources.download.minecraft.net",
         "libraries.minecraft.net",
 

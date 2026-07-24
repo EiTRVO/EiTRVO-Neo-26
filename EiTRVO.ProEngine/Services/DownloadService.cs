@@ -94,7 +94,7 @@ public class DownloadService : IDownloadService
         string idxFile = Path.Combine(idxDir, $"{assetIdxId}.json");
 
         if (!File.Exists(idxFile) && detail.AssetIndex?.Url != null)
-            await DownloadFileWithRetryAsync(httpClient, detail.AssetIndex.Url, idxFile, maxRetries: 2, progress, $"索引 {assetIdxId}.json", ct);
+            await DownloadFileWithRetryAsync(httpClient, detail.AssetIndex.Url, idxFile, maxRetries: 2, progress, $"索引 {assetIdxId}.json", ct, detail.AssetIndex.Sha1);
 
         if (File.Exists(idxFile))
         {
@@ -119,7 +119,7 @@ public class DownloadService : IDownloadService
         // Helper: schedule a download if the file is missing, otherwise just tick
         // progress. Deduplicates by destination path so every fileCompleted() call
         // matches exactly one counted file.
-        void Schedule(string url, string dest, Action? postDownload = null)
+        void Schedule(string url, string dest, string? expectedSha1 = null, Action? postDownload = null)
         {
             if (!scheduledPaths.Add(dest)) return;  // already handled — counting deduped too
             if (File.Exists(dest))
@@ -129,7 +129,7 @@ public class DownloadService : IDownloadService
                 return;
             }
             string displayName = Path.GetFileName(dest);
-            downloadTasks.Add(DownloadWithSemaphoreAsync(httpClient, url, dest, sem, () =>
+            downloadTasks.Add(DownloadWithSemaphoreAsync(httpClient, url, dest, sem, expectedSha1, () =>
             {
                 postDownload?.Invoke();
                 fileCompleted();
@@ -140,7 +140,7 @@ public class DownloadService : IDownloadService
         if (detail.Downloads?.Client?.Url != null)
         {
             string jarPath = Path.Combine(Path.Combine(gameDir, "versions", instanceName), $"{versionId}.jar");
-            Schedule(detail.Downloads.Client.Url, jarPath);
+            Schedule(detail.Downloads.Client.Url, jarPath, detail.Downloads.Client.Sha1);
         }
 
         // Libraries
@@ -155,7 +155,7 @@ public class DownloadService : IDownloadService
                 {
                     var dest = Path.Combine(libDir, lib.Downloads.Artifact.Path);
                     Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                    Schedule(lib.Downloads.Artifact.Url, dest);
+                    Schedule(lib.Downloads.Artifact.Url, dest, lib.Downloads.Artifact.Sha1);
                 }
 
                 if (lib.Natives != null && lib.Natives.TryGetValue("windows", out var nc))
@@ -167,7 +167,7 @@ public class DownloadService : IDownloadService
                         Directory.CreateDirectory(Path.GetDirectoryName(jarPath)!);
                         string nativesOut = Path.Combine(gameDir, "natives", versionId);
                         Directory.CreateDirectory(nativesOut);
-                        Schedule(info.Url, jarPath, postDownload: () => ExtractNativeJar(jarPath, nativesOut));
+                        Schedule(info.Url, jarPath, info.Sha1, postDownload: () => ExtractNativeJar(jarPath, nativesOut));
                     }
                 }
             }
@@ -178,7 +178,7 @@ public class DownloadService : IDownloadService
         {
             string dest = Path.Combine(gameDir, detail.Logging.Client.File.Path ?? "log_configs/temp.xml");
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            Schedule(detail.Logging.Client.File.Url, dest);
+            Schedule(detail.Logging.Client.File.Url, dest, detail.Logging.Client.File.Sha1);
         }
 
         // Asset index (already downloaded above)
@@ -267,14 +267,14 @@ public class DownloadService : IDownloadService
 
     public async Task DownloadFileWithRetryAsync(HttpClient httpClient, string url, string path,
         int maxRetries = 2, IProgress<DownloadProgress>? progress = null, string? displayName = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default, string? expectedSha1 = null)
     {
         for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
             ct.ThrowIfCancellationRequested();
             try
             {
-                await DownloadFileFastAsync(httpClient, url, path, progress, displayName, ct);
+                await DownloadFileFastAsync(httpClient, url, path, progress, displayName, ct, expectedSha1);
                 return;
             }
             catch (OperationCanceledException) { throw; }
@@ -291,6 +291,10 @@ public class DownloadService : IDownloadService
         IProgress<DownloadProgress>? progress = null, string? displayName = null,
         CancellationToken ct = default, string? expectedSha1 = null)
     {
+        if (!DownloadSafetyHelper.IsDownloadUrlAllowed(url))
+            throw new InvalidOperationException(
+                $"下载 URL 不在白名单中，已拒绝：{url}");
+
         using var resp = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
         resp.EnsureSuccessStatusCode();
         // Write to temp file first, then atomically rename — prevents
@@ -363,14 +367,14 @@ public class DownloadService : IDownloadService
     }
 
     private async Task DownloadWithSemaphoreAsync(HttpClient httpClient, string url, string path,
-        SemaphoreSlim sem, Action onComplete,
+        SemaphoreSlim sem, string? expectedSha1, Action onComplete,
         IProgress<DownloadProgress>? progress = null, string? displayName = null,
         CancellationToken ct = default)
     {
         await sem.WaitAsync(ct);
         try
         {
-            await DownloadFileWithRetryAsync(httpClient, url, path, maxRetries: 2, progress, displayName, ct);
+            await DownloadFileWithRetryAsync(httpClient, url, path, maxRetries: 2, progress, displayName, ct, expectedSha1);
             onComplete();
         }
         finally
