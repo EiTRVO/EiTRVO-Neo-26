@@ -1,0 +1,337 @@
+<UserControl x:Class="EiTRVO.UI.Panels.ResourceDownloadPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+            <Grid >
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header: back + title -->
+                <Border Grid.Row="0" Padding="24,16,24,10"
+                        BorderBrush="{DynamicResource SidebarBorder}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="← 返回"
+                                Style="{StaticResource CardBtn}"
+                                Foreground="{DynamicResource AccentBlue}"
+                                Height="28" FontSize="12" Padding="10,3"
+                                Command="{Binding GoBackCommand}"/>
+                        <TextBlock Text="资源下载"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"
+                                   Margin="16,0,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Body: sidebar + content -->
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="2"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left sidebar -->
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource SidebarBg}">
+                        <StackPanel Margin="6,8,6,6">
+                            <Button Tag="mod"
+                                    Command="{Binding SelectTabCommand}"
+                                    CommandParameter="mod">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedTab}" Value="mod">
+                                                <Setter Property="Background" Value="{DynamicResource MenuActiveBg}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="模组下载" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                            </Button>
+                            <Button Tag="resource"
+                                    Command="{Binding SelectTabCommand}"
+                                    CommandParameter="resource">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedTab}" Value="resource">
+                                                <Setter Property="Background" Value="{DynamicResource MenuActiveBg}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="资源包下载" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                            </Button>
+                            <Button Tag="shader"
+                                    Command="{Binding SelectTabCommand}"
+                                    CommandParameter="shader">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedTab}" Value="shader">
+                                                <Setter Property="Background" Value="{DynamicResource MenuActiveBg}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="光影包下载" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Thin divider -->
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource SidebarBorder}"/>
+
+                    <!-- Content area -->
+                    <Grid Grid.Column="2"
+                          Background="{DynamicResource WindowBg}">
+                        <Grid Margin="20,12">
+
+                        <!-- ===== MOD TAB ===== -->
+                        <Grid Visibility="{Binding IsModVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Search bar -->
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0"
+                                          ItemsSource="{Binding MinecraftVersions}"
+                                          SelectedItem="{Binding SelectedMcVersion}"
+                                          Height="32"
+                                          FontSize="13"
+                                          Foreground="{DynamicResource TextPrimary}"
+                                          Background="{DynamicResource Surface}"
+                                          BorderBrush="{DynamicResource InputBorder}"
+                                          VerticalContentAlignment="Center"/>
+                                <TextBox Grid.Column="1" Height="32"
+                                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="13"
+                                         Foreground="{DynamicResource TextPrimary}"
+                                         Background="{DynamicResource Surface}"
+                                         BorderBrush="{DynamicResource InputBorder}"
+                                         Padding="10,4"
+                                         VerticalContentAlignment="Center"
+                                         Margin="8,0,0,0"/>
+                                <Button Grid.Column="2" Content="搜索"
+                                        Style="{StaticResource PrimaryBtn}"
+                                        Height="32" FontSize="13" Padding="16,0"
+                                        Margin="16,0,0,0"
+                                        Command="{Binding SearchAsync}"/>
+                            </Grid>
+
+                            <!-- Results info / loading -->
+                            <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                                <TextBlock FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Visibility="{Binding IsModSearching, Converter={StaticResource BoolToVisibilityConverter}}"
+                                           Text="搜索中..."/>
+                                <TextBlock FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Visibility="{Binding IsModSearching, Converter={StaticResource BoolInvertConverter}}">
+                                    <Run Text="找到 "/>
+                                    <Run Text="{Binding ModTotalResults}" FontWeight="SemiBold"/>
+                                    <Run Text=" 个结果"/>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <!-- No results -->
+                            <TextBlock Grid.Row="2"
+                                       Text="没有找到匹配的模组。请尝试其他关键词。"
+                                       FontSize="13"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding ModHasNoResults, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                            <!-- Results list -->
+                            <ListBox Grid.Row="2" x:Name="lstSearchResults"
+                                     SelectionMode="Single"
+                                     ItemsSource="{Binding ModSearchResults}"
+                                     ItemTemplate="{StaticResource ModDownloadCardTemplate}"
+                                     ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     Visibility="{Binding ModHasNoResults, Converter={StaticResource BoolInvertConverter}}"/>
+
+                            <!-- Modrinth attribution -->
+                            <TextBlock Grid.Row="3"
+                                       Text="模组数据来自 Modrinth"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,10,0,4"/>
+                        </Grid>
+
+                        <!-- ===== RESOURCE PACK TAB ===== -->
+                        <Grid Visibility="{Binding IsResourceVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0"
+                                          ItemsSource="{Binding MinecraftVersions}"
+                                          SelectedItem="{Binding SelectedMcVersion}"
+                                          Height="32"
+                                          FontSize="13"
+                                          Foreground="{DynamicResource TextPrimary}"
+                                          Background="{DynamicResource Surface}"
+                                          BorderBrush="{DynamicResource InputBorder}"
+                                          VerticalContentAlignment="Center"/>
+                                <TextBox Grid.Column="1" Height="32"
+                                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="13"
+                                         Foreground="{DynamicResource TextPrimary}"
+                                         Background="{DynamicResource Surface}"
+                                         BorderBrush="{DynamicResource InputBorder}"
+                                         Padding="10,4"
+                                         VerticalContentAlignment="Center"
+                                         Margin="8,0,0,0"/>
+                                <Button Grid.Column="2" Content="搜索"
+                                        Style="{StaticResource PrimaryBtn}"
+                                        Height="32" FontSize="13" Padding="16,0"
+                                        Margin="16,0,0,0"
+                                        Command="{Binding SearchAsync}"/>
+                            </Grid>
+
+                            <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                                <TextBlock FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Visibility="{Binding IsResourceSearching, Converter={StaticResource BoolToVisibilityConverter}}"
+                                           Text="搜索中..."/>
+                                <TextBlock FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Visibility="{Binding IsResourceSearching, Converter={StaticResource BoolInvertConverter}}">
+                                    <Run Text="找到 "/>
+                                    <Run Text="{Binding ResourceTotalResults}" FontWeight="SemiBold"/>
+                                    <Run Text=" 个结果"/>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="2"
+                                       Text="没有找到匹配的资源包。请尝试其他关键词。"
+                                       FontSize="13"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding ResourceHasNoResults, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                            <ListBox Grid.Row="2" x:Name="lstResourceSearchResults"
+                                     SelectionMode="Single"
+                                     ItemsSource="{Binding ResourceSearchResults}"
+                                     ItemTemplate="{StaticResource ResourcePackDownloadCardTemplate}"
+                                     ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     Visibility="{Binding ResourceHasNoResults, Converter={StaticResource BoolInvertConverter}}"/>
+
+                            <TextBlock Grid.Row="3"
+                                       Text="资源包数据来自 Modrinth"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,10,0,4"/>
+                        </Grid>
+
+                        <!-- ===== SHADER PACK TAB ===== -->
+                        <Grid Visibility="{Binding IsShaderVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0"
+                                          ItemsSource="{Binding MinecraftVersions}"
+                                          SelectedItem="{Binding SelectedMcVersion}"
+                                          Height="32"
+                                          FontSize="13"
+                                          Foreground="{DynamicResource TextPrimary}"
+                                          Background="{DynamicResource Surface}"
+                                          BorderBrush="{DynamicResource InputBorder}"
+                                          VerticalContentAlignment="Center"/>
+                                <TextBox Grid.Column="1" Height="32"
+                                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="13"
+                                         Foreground="{DynamicResource TextPrimary}"
+                                         Background="{DynamicResource Surface}"
+                                         BorderBrush="{DynamicResource InputBorder}"
+                                         Padding="10,4"
+                                         VerticalContentAlignment="Center"
+                                         Margin="8,0,0,0"/>
+                                <Button Grid.Column="2" Content="搜索"
+                                        Style="{StaticResource PrimaryBtn}"
+                                        Height="32" FontSize="13" Padding="16,0"
+                                        Margin="16,0,0,0"
+                                        Command="{Binding SearchAsync}"/>
+                            </Grid>
+
+                            <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                                <TextBlock FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Visibility="{Binding IsShaderSearching, Converter={StaticResource BoolToVisibilityConverter}}"
+                                           Text="搜索中..."/>
+                                <TextBlock FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Visibility="{Binding IsShaderSearching, Converter={StaticResource BoolInvertConverter}}">
+                                    <Run Text="找到 "/>
+                                    <Run Text="{Binding ShaderTotalResults}" FontWeight="SemiBold"/>
+                                    <Run Text=" 个结果"/>
+                                </TextBlock>
+                            </StackPanel>
+
+                            <TextBlock Grid.Row="2"
+                                       Text="没有找到匹配的光影包。请尝试其他关键词。"
+                                       FontSize="13"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="{Binding ShaderHasNoResults, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                            <ListBox Grid.Row="2" x:Name="lstShaderSearchResults"
+                                     SelectionMode="Single"
+                                     ItemsSource="{Binding ShaderSearchResults}"
+                                     ItemTemplate="{StaticResource ShaderPackDownloadCardTemplate}"
+                                     ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     Visibility="{Binding ShaderHasNoResults, Converter={StaticResource BoolInvertConverter}}"/>
+
+                            <TextBlock Grid.Row="3"
+                                       Text="光影包数据来自 Modrinth"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,10,0,4"/>
+                        </Grid>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
+</UserControl>

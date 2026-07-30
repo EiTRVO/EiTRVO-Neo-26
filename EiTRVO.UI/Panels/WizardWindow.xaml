@@ -1,0 +1,169 @@
+<Window x:Class="EiTRVO.UI.Panels.WizardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:panels="clr-namespace:EiTRVO.UI.Panels"
+        Title="EiTRVO Neo — 首次启动向导"
+        Height="600" Width="920"
+        MinWidth="800" MinHeight="520"
+        FontFamily="{StaticResource CustomFont}"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBg}">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240"/>
+            <ColumnDefinition Width="1"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ============================ -->
+        <!-- LEFT: Step Indicator        -->
+        <!-- ============================ -->
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBg}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Branding header -->
+                <Border Grid.Row="0" Padding="18,20,18,14"
+                        BorderBrush="{DynamicResource SidebarBorder}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel>
+                        <TextBlock Text="EiTRVO Neo" FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource AccentBlue}"/>
+                        <TextBlock Text="首次设置向导" FontSize="11"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Step list -->
+                <ItemsControl Grid.Row="1" ItemsSource="{Binding Steps}"
+                              Margin="12,20,12,12">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,4" Padding="12,10" CornerRadius="8"
+                                    Background="{DynamicResource CardBg}"
+                                    BorderBrush="{DynamicResource PanelBorder}"
+                                    BorderThickness="1">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource CardSelectedBg}"/>
+                                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBlue}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <!-- Step number circle -->
+                                    <Border Width="28" Height="28" CornerRadius="14"
+                                            Background="{DynamicResource AccentBlue}"
+                                            VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                                        <Setter Property="Background" Value="{DynamicResource BtnBorder}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="{Binding Number}" FontSize="12"
+                                                   FontWeight="Bold"
+                                                   Foreground="White"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextPrimary}"/>
+                                        <TextBlock Text="{Binding Description}" FontSize="10"
+                                                   Foreground="{DynamicResource TextMuted}"
+                                                   Margin="0,1,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
+        </Border>
+
+        <!-- Separator -->
+        <Border Grid.Column="1" Background="{DynamicResource SidebarBorder}"/>
+
+        <!-- ============================ -->
+        <!-- RIGHT: Content Area         -->
+        <!-- ============================ -->
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Page content -->
+            <Grid Grid.Row="0" Margin="32,28,32,0">
+                <!-- Page 1: Welcome -->
+                <panels:WizardPage1_Welcome x:Name="page1"
+                    Visibility="Visible"/>
+
+                <!-- Page 2: Security -->
+                <panels:WizardPage2_Security x:Name="page2"
+                    Visibility="Collapsed"/>
+
+                <!-- Page 3: Account -->
+                <panels:WizardPage3_Account x:Name="page3"
+                    Visibility="Collapsed"/>
+
+                <!-- Page 4: Summary -->
+                <panels:WizardPage4_Summary x:Name="page4"
+                    Visibility="Collapsed"/>
+            </Grid>
+
+            <!-- Footer: Navigation Buttons -->
+            <Border Grid.Row="1" Padding="24,14"
+                    BorderBrush="{DynamicResource SidebarBorder}"
+                    BorderThickness="0,1,0,0"
+                    Background="{DynamicResource SidebarBg}">
+                <Grid>
+                    <!-- Left side: skip -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                        <Button Content="跳过向导"
+                                Style="{StaticResource CardBtn}"
+                                Height="30" FontSize="12" Padding="12,4"
+                                Foreground="{DynamicResource TextMuted}"
+                                Visibility="{Binding IsSkipVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Command="{Binding SkipCommand}"/>
+                    </StackPanel>
+
+                    <!-- Right side: back / next / finish -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="← 上一步"
+                                Style="{StaticResource CardBtn}"
+                                Height="30" FontSize="12" Padding="12,4"
+                                Visibility="{Binding IsBackVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Command="{Binding GoBackCommand}"/>
+                        <Button Content="下一步 →"
+                                Style="{StaticResource PrimaryBtn}"
+                                Height="30" FontSize="13" Padding="18,4"
+                                Margin="10,0,0,0"
+                                Visibility="{Binding IsNextVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Command="{Binding GoNextCommand}"/>
+                        <Button Content="完成"
+                                Style="{StaticResource PrimaryBtn}"
+                                Height="30" FontSize="13" Padding="20,4"
+                                Margin="10,0,0,0"
+                                Visibility="{Binding IsFinishVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Command="{Binding FinishCommand}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

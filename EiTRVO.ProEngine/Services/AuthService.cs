@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using EiTRVO.ProEngine.Models;
+using EiTRVO.ProEngine.Helpers;
 using static EiTRVO.ProEngine.Helpers.Endpoints;
 
 namespace EiTRVO.ProEngine.Services;
@@ -536,6 +537,10 @@ public class AuthService : IAuthService
             try
             {
                 string tmpPath = jarPath + ".part";
+
+                if (!DownloadSafetyHelper.IsDownloadUrlAllowed(AuthlibInjectorDownloadUrl))
+                    throw new InvalidOperationException(
+                        $"authlib-injector 下载 URL 不在白名单中，已拒绝：{AuthlibInjectorDownloadUrl}");
 
                 using var response = await httpClient.GetAsync(
                     AuthlibInjectorDownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct);

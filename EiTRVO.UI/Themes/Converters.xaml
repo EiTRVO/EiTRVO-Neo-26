@@ -7,5 +7,6 @@
     <Converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     <Converters:BoolInvertConverter x:Key="BoolInvertConverter"/>
     <Converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter"/>
+    <Converters:RatioToGridLengthConverter x:Key="RatioToGridLengthConverter"/>
 
 </ResourceDictionary>

@@ -47,4 +47,12 @@ public class LauncherSettings
     // === 下载 ===
     /// <summary>禁用多线程分块下载，强制使用单连接下载。</summary>
     public bool DisableChunkedDownload { get; set; } = false;
+
+    // === 调试 ===
+    /// <summary>调试模式：跳过 Java 版本兼容性检查，直接使用选定 Java 启动。</summary>
+    public bool DebugMode { get; set; } = false;
+
+    // === 首次启动向导 ===
+    /// <summary>首次启动向导是否已完成。默认 false，新安装自动触发向导。</summary>
+    public bool WizardCompleted { get; set; } = false;
 }

@@ -71,7 +71,7 @@ public class InstanceManager
                 jarFile = Path.Combine(dir, $"{versionId}.jar");
             if (!File.Exists(jarFile)) continue;
 
-            var instance = new GameInstance { Name = folderName, VersionId = versionId };
+            var instance = new GameInstance { Name = folderName, VersionId = versionId, InheritsFrom = detail.InheritsFrom };
 
             // Read instance isolation metadata
             if (hasInstanceMeta)

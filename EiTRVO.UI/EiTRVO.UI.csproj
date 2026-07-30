@@ -6,11 +6,11 @@
     <UseWPF>true</UseWPF>
     <IncludePackageReferencesDuringMarkupCompilation>true</IncludePackageReferencesDuringMarkupCompilation>
     <ApplicationIcon>icon\icon.ico</ApplicationIcon>
-    <AssemblyTitle>EiTRVO Neo 26</AssemblyTitle>
+    <AssemblyTitle>EiTRVO Neo 26.1</AssemblyTitle>
     <Product>EiTRVO Neo</Product>
     <Description>A launcher powered by EiTRVO ProEngine</Description>
     <Copyright>© 2026 EiTRVO</Copyright>
-    <Version>26.0.1006.0</Version>
+    <Version>26.1.1008.0</Version>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>

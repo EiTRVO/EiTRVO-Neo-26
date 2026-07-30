@@ -70,4 +70,43 @@ public class PlaceholderHelperTests
         CollectionAssert.Contains(args, "--name");
         CollectionAssert.Contains(args, "newname");
     }
+
+    // ==================== B2: 新增占位符测试 ====================
+
+    [TestMethod]
+    public void ReplacePlaceholders_NativesDirectory_Replaced()
+    {
+        string result = PlaceholderHelper.ReplacePlaceholders(
+            "-Djava.library.path=${natives_directory}",
+            "", "", "", "", "", "", "", "", null, "D:/natives/1.21");
+        Assert.AreEqual("-Djava.library.path=D:/natives/1.21", result);
+    }
+
+    [TestMethod]
+    public void ReplacePlaceholders_NativesDirectoryNull_ReplacedWithEmpty()
+    {
+        // When nativesDirectory is not provided (default null), replace with empty string
+        string result = PlaceholderHelper.ReplacePlaceholders(
+            "-Djava.library.path=${natives_directory}",
+            "", "", "", "", "", "", "", "");
+        Assert.AreEqual("-Djava.library.path=", result);
+    }
+
+    [TestMethod]
+    public void ReplacePlaceholders_LauncherNameAndVersion_Replaced()
+    {
+        string result = PlaceholderHelper.ReplacePlaceholders(
+            "-Dminecraft.launcher.brand=${launcher_name} -Dminecraft.launcher.version=${launcher_version}",
+            "", "", "", "", "", "", "", "");
+        Assert.AreEqual("-Dminecraft.launcher.brand=eitrvo-neo -Dminecraft.launcher.version=26", result);
+    }
+
+    [TestMethod]
+    public void ReplacePlaceholders_JnaTempDir_Replaced()
+    {
+        string result = PlaceholderHelper.ReplacePlaceholders(
+            "-Djna.tmpdir=${natives_directory}",
+            "", "", "", "", "", "", "", "", null, "/mc/natives/1.21");
+        Assert.AreEqual("-Djna.tmpdir=/mc/natives/1.21", result);
+    }
 }

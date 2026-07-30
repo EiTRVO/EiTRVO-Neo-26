@@ -77,12 +77,11 @@ public static class Endpoints
     public static string ModrinthVersionFile(string sha1) =>
         $"{ModrinthApi}/version_file/{sha1}?algorithm=sha1";
 
-    // ==================== Microsoft Graph API (OneDrive App Folder) ====================
-    public static string GraphAppRoot(string relativePath)
-    {
-        relativePath = (relativePath ?? "").TrimStart('/');
-        return string.IsNullOrEmpty(relativePath)
-            ? "https://graph.microsoft.com/v1.0/me/drive/special/approot"
-            : $"https://graph.microsoft.com/v1.0/me/drive/special/approot:/{relativePath}";
-    }
+    /// <summary>POST — bulk SHA-1 → version file lookup.</summary>
+    public const string ModrinthVersionFiles = "https://api.modrinth.com/v2/version_files";
+
+    /// <summary>GET — bulk project detail lookup by comma-separated IDs.</summary>
+    public static string ModrinthProjects(string ids) =>
+        $"{ModrinthApi}/projects?ids={Uri.EscapeDataString(ids)}";
+
 }

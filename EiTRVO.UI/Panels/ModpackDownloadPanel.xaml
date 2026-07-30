@@ -97,15 +97,9 @@
                      SelectionMode="Single"
                      ItemsSource="{Binding SearchResults}"
                      ItemTemplate="{StaticResource ModpackDownloadCardTemplate}"
+                     ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     Visibility="{Binding HasNoResults, Converter={StaticResource BoolInvertConverter}}">
-                <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="Padding" Value="0"/>
-                    </Style>
-                </ListBox.ItemContainerStyle>
-            </ListBox>
+                     Visibility="{Binding HasNoResults, Converter={StaticResource BoolInvertConverter}}"/>
 
             <!-- Modrinth attribution -->
             <TextBlock Grid.Row="3"

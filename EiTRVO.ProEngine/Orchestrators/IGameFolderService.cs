@@ -18,6 +18,9 @@ public interface IGameFolderService
     /// <summary>.minecraft/settings.json</summary>
     string SettingsFile { get; }
 
+    /// <summary>.minecraft/last_launch.json (DPAPI encrypted)</summary>
+    string LastLaunchFile { get; }
+
     /// <summary>.minecraft/libraries/</summary>
     string LibrariesDir { get; }
 

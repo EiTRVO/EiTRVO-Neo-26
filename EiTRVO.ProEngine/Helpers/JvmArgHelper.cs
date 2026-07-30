@@ -36,7 +36,7 @@ public static class JvmArgHelper
     public static bool IsJvmArgSafe(string arg)
     {
         foreach (var prefix in DangerousJvmArgPrefixes)
-            if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (arg.Contains(prefix, StringComparison.OrdinalIgnoreCase))
                 return false;
         return true;
     }
@@ -96,6 +96,9 @@ public static class JvmArgHelper
         string right = arg[(eq + 1)..];
         if (right.Length >= 2 && right.StartsWith('"') && right.EndsWith('"'))
             right = right[1..^1];
+        // Trim leading/trailing whitespace from value (handles malformed values
+        // like "-DFabricMcEmu= net.minecraft.client.main.Main " from Fabric API).
+        right = right.Trim();
         return left + right;
     }
 
@@ -116,6 +119,16 @@ public static class JvmArgHelper
                     "linux" => OperatingSystem.IsLinux(),
                     _ => true
                 };
+
+                // Check architecture if specified (e.g. "x86" for 32-bit only rules)
+                if (applies && !string.IsNullOrEmpty(rule.Os.Arch))
+                {
+                    applies = rule.Os.Arch switch
+                    {
+                        "x86" => !Environment.Is64BitOperatingSystem,
+                        _ => true
+                    };
+                }
             }
             if (applies) allowed = rule.Action == "allow";
         }

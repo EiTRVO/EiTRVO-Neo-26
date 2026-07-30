@@ -160,14 +160,9 @@
                                          SelectionMode="Single"
                                          ItemsSource="{Binding ResourcePacks}"
                                          ItemTemplate="{StaticResource ResourceCardTemplate}"
+                                         ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          Visibility="{Binding IsResourceEmpty, Converter={StaticResource BoolInvertConverter}}">
-                                    <ListBox.ItemContainerStyle>
-                                        <Style TargetType="ListBoxItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                            <Setter Property="Padding" Value="0"/>
-                                        </Style>
-                                    </ListBox.ItemContainerStyle>
                                 </ListBox>
                             </Grid>
                         </Grid>
@@ -217,14 +212,9 @@
                                          SelectionMode="Single"
                                          ItemsSource="{Binding ShaderPacks}"
                                          ItemTemplate="{StaticResource ShaderCardTemplate}"
+                                         ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          Visibility="{Binding IsShaderEmpty, Converter={StaticResource BoolInvertConverter}}">
-                                    <ListBox.ItemContainerStyle>
-                                        <Style TargetType="ListBoxItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                            <Setter Property="Padding" Value="0"/>
-                                        </Style>
-                                    </ListBox.ItemContainerStyle>
                                 </ListBox>
                             </Grid>
                         </Grid>
@@ -303,14 +293,9 @@
                                      SelectionMode="Single"
                                      ItemsSource="{Binding ResourceSearchResults}"
                                      ItemTemplate="{StaticResource ResourcePackDownloadCardTemplate}"
+                                     ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      Visibility="{Binding ResourceHasNoResults, Converter={StaticResource BoolInvertConverter}}">
-                                <ListBox.ItemContainerStyle>
-                                    <Style TargetType="ListBoxItem">
-                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                        <Setter Property="Padding" Value="0"/>
-                                    </Style>
-                                </ListBox.ItemContainerStyle>
                             </ListBox>
 
                             <TextBlock Grid.Row="3"
@@ -396,14 +381,9 @@
                                      SelectionMode="Single"
                                      ItemsSource="{Binding ShaderSearchResults}"
                                      ItemTemplate="{StaticResource ShaderPackDownloadCardTemplate}"
+                                     ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      Visibility="{Binding ShaderHasNoResults, Converter={StaticResource BoolInvertConverter}}">
-                                <ListBox.ItemContainerStyle>
-                                    <Style TargetType="ListBoxItem">
-                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                        <Setter Property="Padding" Value="0"/>
-                                    </Style>
-                                </ListBox.ItemContainerStyle>
                             </ListBox>
 
                             <TextBlock Grid.Row="3"

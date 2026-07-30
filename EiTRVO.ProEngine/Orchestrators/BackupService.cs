@@ -73,33 +73,32 @@ public class BackupService
         };
     }
 
-    /// <summary>获取下次备份时间的显示文案。</summary>
+    /// <summary>获取下次备份时间的显示文案。基于时间的间隔返回精确日期（yyyy-MM-dd），"每次启动"返回事件描述。</summary>
     public static string GetNextBackupDisplay(BackupInterval interval, DateTimeOffset? lastBackupTime)
     {
-        // 从未备份过时以"现在"为基准，显示相对时间而非全部显示"下次启动时"
+        // "每次启动"是事件驱动，无法预测日期
+        if (interval == BackupInterval.EveryLaunch)
+            return "下次备份：下次启动时";
+
+        // 以最后一次备份时间为基准，从未备份过则以当前时间为准
         var effectiveLast = lastBackupTime ?? DateTimeOffset.UtcNow;
         var now = DateTimeOffset.UtcNow;
 
-        switch (interval)
+        // 按间隔计算下次备份的基准日期
+        DateTime nextDate = interval switch
         {
-            case BackupInterval.EveryLaunch:
-                return "下次备份：下次启动时";
-            case BackupInterval.Daily:
-                if (effectiveLast.Date < now.Date)
-                    return "下次备份：下次启动时";
-                return "下次备份：明天启动时";
-            case BackupInterval.Weekly:
-                var daysSince = (now.Date - effectiveLast.Date).Days;
-                if (daysSince >= 7)
-                    return "下次备份：下次启动时";
-                return $"下次备份：{7 - daysSince} 天后启动时";
-            case BackupInterval.Monthly:
-                if (effectiveLast.Month != now.Month || effectiveLast.Year != now.Year)
-                    return "下次备份：下次启动时";
-                return "下次备份：下月启动时";
-            default:
-                return "";
-        }
+            BackupInterval.Daily => effectiveLast.Date.AddDays(1),
+            BackupInterval.Weekly => effectiveLast.Date.AddDays(7),
+            // AddMonths(1) 遵循 .NET 语义（如 1-31 → 2-28），此处符合预期
+            BackupInterval.Monthly => effectiveLast.Date.AddMonths(1),
+            _ => effectiveLast.Date
+        };
+
+        // 若计算出的日期已过期，备份将在下次启动时触发
+        if (nextDate <= now.Date)
+            return "下次备份：下次启动时";
+
+        return $"下次备份：{nextDate:yyyy-MM-dd}";
     }
 
     // ==================== 备份 ====================

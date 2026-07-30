@@ -8,7 +8,8 @@ namespace EiTRVO.ProEngine.Models;
 public enum AccountType
 {
     Microsoft,   // 现有 Microsoft OAuth 账号（默认值 0，兼容旧数据）
-    Yggdrasil    // 第三方 Yggdrasil 验证账号
+    Yggdrasil,   // 第三方 Yggdrasil 验证账号
+    Offline      // 离线账号（仅用户名，无 token）
 }
 
 public class Account : INotifyPropertyChanged
@@ -64,12 +65,14 @@ public class Account : INotifyPropertyChanged
 
     // === Yggdrasil 专用 ===
 
+    [JsonPropertyName("yggdrasilServerUrl")]
     public string? YggdrasilServerUrl
     {
         get => _yggdrasilServerUrl;
         set { _yggdrasilServerUrl = value; OnPropertyChanged(); OnPropertyChanged(nameof(AccountTypeLabel)); OnPropertyChanged(nameof(ServerDisplayName)); }
     }
 
+    [JsonPropertyName("yggdrasilEmail")]
     public string? YggdrasilEmail
     {
         get => _yggdrasilEmail;
@@ -77,14 +80,17 @@ public class Account : INotifyPropertyChanged
     }
 
     /// <summary>DPAPI-encrypted password (encrypted separately inside accounts.json).</summary>
+    [JsonPropertyName("yggdrasilEncryptedPassword")]
     public string? YggdrasilEncryptedPassword { get; set; }
 
+    [JsonPropertyName("yggdrasilAccessToken")]
     public string? YggdrasilAccessToken
     {
         get => _yggdrasilAccessToken;
         set { _yggdrasilAccessToken = value; OnPropertyChanged(); }
     }
 
+    [JsonPropertyName("yggdrasilClientToken")]
     public string? YggdrasilClientToken
     {
         get => _yggdrasilClientToken;
@@ -95,6 +101,9 @@ public class Account : INotifyPropertyChanged
 
     [JsonIgnore]
     public bool IsMicrosoftAccount => Type == AccountType.Microsoft;
+
+    [JsonIgnore]
+    public bool IsOfflineAccount => Type == AccountType.Offline;
 
     [JsonIgnore]
     public string DisplayText => Username;
@@ -122,6 +131,7 @@ public class Account : INotifyPropertyChanged
     {
         AccountType.Microsoft => "Microsoft",
         AccountType.Yggdrasil => ServerDisplayName,
+        AccountType.Offline => "离线",
         _ => "未知"
     };
 

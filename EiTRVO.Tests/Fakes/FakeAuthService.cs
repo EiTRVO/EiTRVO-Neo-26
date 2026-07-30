@@ -20,7 +20,16 @@ public class FakeAuthService : IAuthService
     public Task<Account> AuthenticateYggdrasilAsync(
         HttpClient httpClient, string serverUrl, string email, string password,
         CancellationToken ct = default)
-        => throw new NotSupportedException();
+    {
+        if (YggdrasilAuthThrows != null)
+            throw YggdrasilAuthThrows;
+        return Task.FromResult<Account>(YggdrasilAuthResult!);
+    }
+
+    /// <summary>Configurable result for Yggdrasil authentication. Returns null by default.</summary>
+    public Account? YggdrasilAuthResult { get; set; }
+    /// <summary>If set, AuthenticateYggdrasilAsync throws this exception instead of returning a result.</summary>
+    public Exception? YggdrasilAuthThrows { get; set; }
 
     public Task<Account> RefreshYggdrasilAsync(HttpClient httpClient, Account account,
         CancellationToken ct = default)

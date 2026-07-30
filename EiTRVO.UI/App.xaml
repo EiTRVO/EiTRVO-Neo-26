@@ -4,12 +4,12 @@
 >
     <Application.Resources>
         <ResourceDictionary>
+            <FontFamily x:Key="CustomFont">/font/Font.ttf#鸿蒙黑体</FontFamily>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Converters.xaml"/>
                 <ResourceDictionary Source="Themes/DarkTheme.xaml"/>
                 <ResourceDictionary Source="Themes/DataTemplates.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <FontFamily x:Key="CustomFont">/font/Font.ttf#鸿蒙黑体</FontFamily>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

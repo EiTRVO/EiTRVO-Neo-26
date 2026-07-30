@@ -10,6 +10,7 @@ public class GameFolderService : IGameFolderService
     public string VersionsDir => Path.Combine(GameDir, "versions");
     public string AccountsFile => Path.Combine(GameDir, "accounts.json");
     public string SettingsFile => Path.Combine(GameDir, "settings.json");
+    public string LastLaunchFile => Path.Combine(GameDir, "last_launch.json");
     public string LibrariesDir => Path.Combine(GameDir, "libraries");
     public string AssetsDir => Path.Combine(GameDir, "assets");
     public string NativesDir => Path.Combine(GameDir, "natives");

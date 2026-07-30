@@ -12,28 +12,50 @@
 
                         <GroupBox Header="启动内存 (MB)" Padding="12"
                                   Margin="0,4">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Slider x:Name="sliderMemory" Minimum="256"
-                                        Maximum="32768"
-                                        TickFrequency="256"
-                                        IsSnapToTickEnabled="True"
-                                        Value="{Binding Memory, Mode=TwoWay}"/>
-                                <StackPanel Grid.Column="1"
-                                            Orientation="Horizontal"
-                                            Margin="10,0,0,0">
-                                    <TextBox x:Name="txtMemory" Width="60"
-                                             Height="28"
-                                             Text="{Binding MemoryText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
-                                    <TextBlock Text=" MB"
-                                               VerticalAlignment="Center"
-                                               Margin="5,0,0,0"
-                                               Foreground="{DynamicResource TextSecondary}"/>
-                                </StackPanel>
-                            </Grid>
+                            <StackPanel>
+                                <!-- 系统信息提示 -->
+                                <TextBlock Text="{Binding MemoryHintText}"
+                                           FontSize="11" Margin="0,0,0,8"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           TextWrapping="Wrap"/>
+
+                                <!-- 滑块 + 输入框 -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- 带刻度滑块（8 格均分） -->
+                                    <Slider x:Name="sliderMemory" Minimum="256"
+                                            Maximum="{Binding MaxMemoryMB}"
+                                            TickFrequency="{Binding CurrentTickFrequency}"
+                                            IsSnapToTickEnabled="True"
+                                            TickPlacement="BottomRight"
+                                            Foreground="{DynamicResource TextSecondary}"
+                                            Value="{Binding Memory, Mode=TwoWay}">
+                                        <Slider.Resources>
+                                            <Style TargetType="TickBar">
+                                                <Setter Property="Height" Value="8"/>
+                                            </Style>
+                                        </Slider.Resources>
+                                    </Slider>
+
+                                    <!-- 输入区域 -->
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Margin="10,0,0,0"
+                                                VerticalAlignment="Center">
+                                        <TextBox x:Name="txtMemory" Width="60"
+                                                 Height="28"
+                                                 Text="{Binding MemoryText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBlock Text=" MB"
+                                                   VerticalAlignment="Center"
+                                                   Margin="5,0,0,0"
+                                                   Foreground="{DynamicResource TextSecondary}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
                         </GroupBox>
 
                         <GroupBox Header="游戏分辨率" Padding="12"
@@ -73,8 +95,8 @@
                             <StackPanel>
                                 <CheckBox x:Name="chkIsolateByDefault"
                                           Content="创建新实例时默认启用游戏目录隔离"
+                                          Style="{StaticResource ToggleSwitchStyle}"
                                           FontSize="12"
-                                          Foreground="{DynamicResource TextPrimary}"
                                           IsChecked="{Binding IsolateNewInstancesByDefault, Mode=TwoWay}"/>
                                 <TextBlock Text="启用后每个实例的存档、Mod、配置等数据独立存放于版本目录下。已有实例不受影响。"
                                            FontSize="10" Foreground="{DynamicResource TextMuted}"
@@ -88,8 +110,8 @@
                                 <!-- 开关：自动检测 vs 手动指定 -->
                                 <CheckBox x:Name="chkAutoDetectJava"
                                           Content="自动检测 Java 运行环境"
+                                          Style="{StaticResource ToggleSwitchStyle}"
                                           FontSize="12"
-                                          Foreground="{DynamicResource TextPrimary}"
                                           IsChecked="{Binding UseAutoDetectJava, Mode=TwoWay}"
                                           Margin="0,0,0,8"/>
 
@@ -138,8 +160,8 @@
                             <StackPanel>
                                 <CheckBox x:Name="chkSettingsLock"
                                           Content="启用设置锁"
+                                          Style="{StaticResource ToggleSwitchStyle}"
                                           FontSize="12"
-                                          Foreground="{DynamicResource TextPrimary}"
                                           IsChecked="{Binding SettingsLockEnabled, Mode=TwoWay}"
                                           IsEnabled="{Binding IsWindowsHelloAvailable}"/>
                                 <TextBlock Text="{Binding SettingsLockHint}"
@@ -150,12 +172,25 @@
                             </StackPanel>
                         </GroupBox>
 
+                        <GroupBox Header="调试" Padding="12" Margin="0,4">
+                            <StackPanel>
+                                <CheckBox x:Name="chkDebugMode"
+                                          Content="调试模式（跳过 Java 版本检查，直接使用选定 Java 启动）"
+                                          Style="{StaticResource ToggleSwitchStyle}"
+                                          FontSize="12"
+                                          IsChecked="{Binding DebugMode, Mode=TwoWay}"/>
+                                <TextBlock Text="开启后启动和下载安装时将跳过 Java 兼容性校验。仅建议高级用户在排查兼容性问题时使用。"
+                                           FontSize="10" Foreground="{DynamicResource TextMuted}"
+                                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
                         <GroupBox Header="EiTRVO Firewall" Padding="12" Margin="0,4">
                             <StackPanel>
                                 <CheckBox x:Name="chkFirewall"
                                           Content="启用游戏进程防护"
+                                          Style="{StaticResource ToggleSwitchStyle}"
                                           FontSize="12"
-                                          Foreground="{DynamicResource TextPrimary}"
                                           IsChecked="{Binding FirewallEnabled, Mode=TwoWay}"/>
                                 <!-- 防护模式选择（仅防火墙启用时可见） -->
                                 <StackPanel Margin="16,8,0,0"
@@ -217,8 +252,8 @@
                             <StackPanel>
                                 <CheckBox x:Name="chkDisableChunkedDownload"
                                           Content="禁用多线程分块下载（若网络不稳定可开启）"
+                                          Style="{StaticResource ToggleSwitchStyle}"
                                           FontSize="12"
-                                          Foreground="{DynamicResource TextPrimary}"
                                           IsChecked="{Binding DisableChunkedDownload, Mode=TwoWay}"/>
                                 <TextBlock Text="关闭时使用多线程分块下载加速大文件获取。若下载频繁失败或网络环境限制并发连接，可开启此选项切换为传统单线程下载。"
                                            FontSize="10" Foreground="{DynamicResource TextMuted}"
@@ -232,8 +267,8 @@
                                 <!-- 自动备份开关 -->
                                 <CheckBox x:Name="chkBackupEnabled"
                                           Content="启用自动备份（启动器启动时检查）"
+                                          Style="{StaticResource ToggleSwitchStyle}"
                                           FontSize="12"
-                                          Foreground="{DynamicResource TextPrimary}"
                                           IsChecked="{Binding BackupEnabled, Mode=TwoWay}"/>
 
                                 <!-- 备份间隔 -->
@@ -268,9 +303,10 @@
 
                                 <!-- 排除可重下载文件 -->
                                 <CheckBox Content="排除 assets 和 libraries（可从 Mojang 重新下载，排除可大幅减小备份体积）"
+                                          Style="{StaticResource ToggleSwitchStyle}"
                                           IsChecked="{Binding ExcludeRedownloadable, Mode=TwoWay}"
                                           Visibility="{Binding BackupEnabled, Converter={StaticResource BoolToVisibilityConverter}}"
-                                          FontSize="12" Foreground="{DynamicResource TextPrimary}" Margin="0,8,0,0"/>
+                                          FontSize="12" Margin="0,8,0,0"/>
 
                                 <!-- 手动备份按钮 -->
                                 <Button Content="立即备份" Style="{StaticResource PrimaryBtn}"

@@ -7,6 +7,14 @@ public class GameInstance
     public string Name { get; set; } = "";
     public string VersionId { get; set; } = "";
 
+    /// <summary>version.json 中 inheritsFrom 字段 — 模组加载器实例指向的父级原版版本。</summary>
+    [JsonIgnore]
+    public string? InheritsFrom { get; set; }
+
+    /// <summary>实例的基础 Minecraft 版本号（不含加载器前缀）。优先取 inheritsFrom，回退到 VersionId。</summary>
+    [JsonIgnore]
+    public string BaseVersion => InheritsFrom ?? VersionId;
+
     // === 实例目录隔离 ===
     public bool UseIsolatedDir { get; set; } = false;
     public string? InstanceDir { get; set; }  // 实例游戏数据目录绝对路径，null = 未隔离

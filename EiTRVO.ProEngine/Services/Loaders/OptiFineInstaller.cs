@@ -116,6 +116,10 @@ internal static class OptiFineInstaller
         string downloadUrl = OptiFineDownloadX(dlxFile, dlxHash);
 
         // Step 1c: Download the actual JAR file
+        if (!DownloadSafetyHelper.IsDownloadUrlAllowed(downloadUrl))
+            throw new InvalidOperationException(
+                $"OptiFine 下载 URL 不在白名单中，已拒绝：{downloadUrl}");
+
         using (var dlReq = new HttpRequestMessage(HttpMethod.Get, downloadUrl))
         {
             dlReq.Headers.Referrer = new Uri(adloadUrl);
@@ -163,6 +167,17 @@ internal static class OptiFineInstaller
                 try { File.Delete(tmp); } catch { }
                 throw;
             }
+
+            // 验证 JAR 文件头（magic bytes PK\x03\x04），防止下载损坏或被篡改的文件
+            byte[] header = new byte[4];
+            using (var fs = File.OpenRead(tmp))
+            {
+                int read = fs.Read(header, 0, 4);
+                if (read < 4 || header[0] != 0x50 || header[1] != 0x4B ||
+                    header[2] != 0x03 || header[3] != 0x04)
+                    throw new InvalidDataException("OptiFine 安装器文件无效（非 JAR 格式）。");
+            }
+
             File.Move(tmp, installerPath, overwrite: true);
         }
 

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
@@ -62,6 +63,17 @@ public partial class AccountViewModel : BaseViewModel
 
     public bool IsYggdrasilFormVisible => IsAddingYggdrasilAccount;
 
+    // === Offline form ===
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOfflineFormVisible))]
+    private bool _isAddingOfflineAccount;
+
+    [ObservableProperty]
+    private string _offlinePlayerName = "";
+
+    public bool IsOfflineFormVisible => IsAddingOfflineAccount;
+
     /// <summary>Raised when the user clicks "管理" on an account card. Parameter is the account UUID.</summary>
     public event Action<string>? NavigateToAccountSkin;
 
@@ -92,6 +104,11 @@ public partial class AccountViewModel : BaseViewModel
     private async Task AddMicrosoftAsync()
     {
         if (IsAddingAccount) return;
+
+        // 互斥：关闭其他表单
+        IsAddingYggdrasilAccount = false;
+        IsAddingOfflineAccount = false;
+
         IsAddingAccount = true;
 
         CancellationTokenSource cts;
@@ -140,6 +157,11 @@ public partial class AccountViewModel : BaseViewModel
                 _accountManager.Save();
                 _notificationService.Show($"微软账号 {newAccount.Username} 登录成功！", NotificationType.Success);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // 用户主动取消 — 静默清理，不显示错误提示。
+            // finally 块会负责重置 IsAddingAccount 和 IsDeviceCodeVisible。
         }
         catch (Exception ex)
         {
@@ -210,6 +232,13 @@ public partial class AccountViewModel : BaseViewModel
     {
         IsAddingYggdrasilAccount = !IsAddingYggdrasilAccount;
         YggdrasilStatus = "";
+
+        // 互斥：关闭其他表单
+        if (IsAddingYggdrasilAccount)
+        {
+            IsAddingOfflineAccount = false;
+            CancelAuth();
+        }
     }
 
     [RelayCommand]
@@ -233,6 +262,15 @@ public partial class AccountViewModel : BaseViewModel
         if (!serverUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
             _notificationService.Show("验证服务器 URL 必须以 https:// 开头。", NotificationType.Warning);
+            return;
+        }
+
+        // 安全策略：防止 URL 中的特殊字符注入 -javaagent: JVM 参数
+        if (serverUrl.Contains('=') || serverUrl.Contains(' ') ||
+            serverUrl.Contains('"') || serverUrl.Contains('\'') ||
+            serverUrl.Contains('\n') || serverUrl.Contains('\r'))
+        {
+            _notificationService.Show("验证服务器 URL 包含非法字符。", NotificationType.Warning);
             return;
         }
 
@@ -298,6 +336,70 @@ public partial class AccountViewModel : BaseViewModel
             YggdrasilStatus = ex.Message;
             _notificationService.Show($"Yggdrasil 认证失败：{ex.Message}", NotificationType.Error);
         }
+    }
+
+    // === 离线账号 ===
+
+    [RelayCommand]
+    private void ToggleOfflineForm()
+    {
+        IsAddingOfflineAccount = !IsAddingOfflineAccount;
+        // 互斥：关闭其他表单
+        if (IsAddingOfflineAccount)
+        {
+            IsAddingYggdrasilAccount = false;
+            CancelAuth();
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddOfflineAccountAsync()
+    {
+        string name = OfflinePlayerName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _notificationService.Show("请输入玩家名。", NotificationType.Warning);
+            return;
+        }
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^[a-zA-Z0-9_]{3,16}$"))
+        {
+            _notificationService.Show("玩家名须为 3-16 位字母、数字或下划线。", NotificationType.Warning);
+            return;
+        }
+
+        // Check for duplicate offline name (same name = same UUID)
+        bool duplicate = _accountManager.Accounts.Any(a =>
+            a.Type == AccountType.Offline &&
+            a.Username.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (duplicate)
+        {
+            _notificationService.Show("该玩家名的离线账号已存在。", NotificationType.Warning);
+            return;
+        }
+
+        var account = new Account
+        {
+            Type = AccountType.Offline,
+            Username = name,
+            UUID = UuidHelper.OfflineUuid(name),
+            LastUsed = DateTime.Now.ToString("O")
+        };
+
+        _accountManager.Accounts.Add(account);
+        _accountManager.Save();
+
+        _notificationService.Show($"离线账号 {name} 已添加。", NotificationType.Success);
+
+        IsAddingOfflineAccount = false;
+        OfflinePlayerName = "";
+    }
+
+    [RelayCommand]
+    private void CancelOffline()
+    {
+        IsAddingOfflineAccount = false;
+        OfflinePlayerName = "";
     }
 
     // === 皮肤管理 ===

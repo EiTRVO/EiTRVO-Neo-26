@@ -10,6 +10,7 @@ public static class DownloadSafetyHelper
     private static readonly HashSet<string> AllowedDownloadHosts = new(StringComparer.OrdinalIgnoreCase)
     {
         // Modrinth CDN
+        "api.modrinth.com",
         "cdn.modrinth.com",
         "cdn-raw.modrinth.com",
 
@@ -18,11 +19,13 @@ public static class DownloadSafetyHelper
         "media.forgecdn.net",
 
         // Mojang / Microsoft CDN
+        "launcher.mojang.com",
         "launchermeta.mojang.com",
         "piston-meta.mojang.com",
         "piston-data.mojang.com",
         "resources.download.minecraft.net",
         "libraries.minecraft.net",
+        "textures.minecraft.net",
 
         // Maven repositories for mod loaders
         "maven.minecraftforge.net",
@@ -34,6 +37,9 @@ public static class DownloadSafetyHelper
         "meta.fabricmc.net",
         "meta.quiltmc.org",
         "files.minecraftforge.net",
+
+        // API metadata
+        "api.github.com",
 
         // Auth
         "authlib-injector.yushi.moe",

@@ -139,3 +139,40 @@ public class ModrinthDependency
     [JsonPropertyName("dependency_type")]
     public string DependencyType { get; set; } = "";
 }
+
+/// <summary>Modrinth <c>GET /version_file/{hash}</c> response — links a file hash to its project and version.</summary>
+public class VersionFileResponse
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("project_id")]
+    public string ProjectId { get; set; } = "";
+
+    [JsonPropertyName("version_id")]
+    public string VersionId { get; set; } = "";
+}
+
+/// <summary>Modrinth project detail (<c>GET /project/{id}</c> or <c>GET /projects?ids=</c>).</summary>
+public class ModrinthProject
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = "";
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = "";
+
+    [JsonPropertyName("slug")]
+    public string Slug { get; set; } = "";
+
+    [JsonPropertyName("icon_url")]
+    public string? IconUrl { get; set; }
+}
+
+/// <summary>Response from <c>POST /version_files</c> — maps SHA-1 hash to its VersionFileResponse.</summary>
+public class VersionFilesBulkResponse : Dictionary<string, VersionFileResponse>
+{
+}

@@ -39,6 +39,23 @@ public class FakeModrinthService : IModrinthService
     public Task<bool> VerifyFileByHashAsync(string sha1, CancellationToken ct = default)
         => throw new NotSupportedException();
 
+    // Configurable results for new bulk API methods
+    public Dictionary<string, VersionFileResponse>? GetVersionFilesByHashesResult { get; set; }
+    public List<ModrinthProject>? GetProjectsByIdsResult { get; set; }
+    public Exception? GetVersionFilesByHashesThrows { get; set; }
+
+    public Task<Dictionary<string, VersionFileResponse>> GetVersionFilesByHashesAsync(
+        IReadOnlyList<string> sha1s, CancellationToken ct = default)
+    {
+        if (GetVersionFilesByHashesThrows != null)
+            throw GetVersionFilesByHashesThrows;
+        return Task.FromResult(GetVersionFilesByHashesResult ?? new Dictionary<string, VersionFileResponse>());
+    }
+
+    public Task<List<ModrinthProject>> GetProjectsByIdsAsync(
+        IReadOnlyList<string> projectIds, CancellationToken ct = default)
+        => Task.FromResult(GetProjectsByIdsResult ?? new List<ModrinthProject>());
+
     public Task<ModrinthSearchResponse> SearchProjectsAsync(string query, string mcVersion,
         string projectType, int limit = 20, int offset = 0,
         CancellationToken ct = default)

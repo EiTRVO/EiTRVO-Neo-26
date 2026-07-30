@@ -324,6 +324,10 @@ public class ModLoaderService : IModLoaderService
         IProgress<DownloadProgress>? progress = null, string? displayName = null,
         CancellationToken ct = default, string? expectedSha1 = null)
     {
+        if (!DownloadSafetyHelper.IsDownloadUrlAllowed(url))
+            throw new InvalidOperationException(
+                $"下载 URL 不在白名单中，已拒绝：{url}");
+
         string? dir = Path.GetDirectoryName(path);
         if (dir != null) Directory.CreateDirectory(dir);
 

@@ -55,8 +55,7 @@ namespace EiTRVO.UI
                 };
                 var client = new System.Net.Http.HttpClient(handler)
                 {
-                    Timeout = TimeSpan.FromMinutes(10),
-                    DefaultRequestVersion = System.Net.HttpVersion.Version11
+                    Timeout = TimeSpan.FromMinutes(10)
                 };
                 client.DefaultRequestHeaders.Add("User-Agent", $"EiTRVONeo/{AppInfo.Version} (EiTRVO)");
                 return client;
@@ -74,6 +73,7 @@ namespace EiTRVO.UI
             services.AddSingleton<IModLoaderService, ModLoaderService>();
             services.AddSingleton<IPackService, PackService>();
             services.AddSingleton<IModrinthService, ModrinthService>();
+            services.AddSingleton<IMrpackInstallService, MrpackInstallService>();
             services.AddSingleton<IDialogService, WpfDialogService>();
             services.AddSingleton<IClipboardService, WpfClipboardService>();
             services.AddSingleton<IProcessService, ProcessService>();
@@ -107,8 +107,12 @@ namespace EiTRVO.UI
             services.AddTransient<ResourcePackViewModel>();
             services.AddTransient<SaveLockDetailViewModel>();
             services.AddTransient<ModpackDownloadViewModel>();
+            services.AddTransient<InstallationViewModel>();
+            services.AddTransient<ResourceDownloadViewModel>();
             services.AddTransient<AccountSkinViewModel>();
             services.AddTransient<SchematicManagementViewModel>();
+            services.AddTransient<ProgressViewModel>();
+            services.AddTransient<WizardViewModel>();
 
             // === MainWindow ===
             services.AddSingleton<MainWindow>();
@@ -126,21 +130,11 @@ namespace EiTRVO.UI
                 WriteCrashLog("未处理的后台线程异常", ex);
             };
 
-            // 2) UI 线程未处理异常 → 写诊断日志 + 阻止 WPF 默认崩溃对话框
+            // 2) UI 线程未处理异常 → 写诊断日志 + 关闭（不弹 MessageBox，避免消息循环重入死循环）
             Application.Current.DispatcherUnhandledException += (sender, args) =>
             {
                 WriteCrashLog("未处理的 UI 线程异常", args.Exception);
                 args.Handled = true;
-                try
-                {
-                    MessageBox.Show(
-                        $"发生未预期错误，启动器需要关闭。\n\n{args.Exception.Message}\n\n" +
-                        "详细信息已写入诊断日志。",
-                        "EiTRVO Neo — 错误",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
-                }
-                catch { /* MessageBox 本身也失败时放弃 */ }
                 Application.Current.Shutdown();
             };
 

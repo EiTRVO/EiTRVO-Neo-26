@@ -5,6 +5,7 @@ using System.IO;
 using System.Management;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
+using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
 
 namespace EiTRVO.UI.Services;
@@ -58,6 +59,13 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
     private string? _gameJavaHome;
     private int _gameProcessId;
     private readonly HashSet<string> _seenAlerts = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly INotificationService? _notification;
+
+    public WindowsGameProcessSecurityService(INotificationService notificationService)
+    {
+        _notification = notificationService;
+    }
 
     // ==================== Layer 1 + 2 ====================
 
@@ -452,6 +460,9 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         catch
         {
             // WMI 不可用时静默失败 —— Layer 1 + 2 仍然生效
+            _notification?.AppendLog(
+                "EiTRVO 防火墙部分防护层不可用（WMI 服务异常），子进程监控、文件系统监控和网络监控已降级",
+                EiTRVO.ProEngine.Models.NotificationType.Warning);
         }
     }
 

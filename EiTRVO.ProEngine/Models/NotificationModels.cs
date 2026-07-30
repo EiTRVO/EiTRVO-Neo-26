@@ -1,14 +1,12 @@
 using System;
-using System.ComponentModel;
 
 namespace EiTRVO.ProEngine.Models;
 
-public class NotificationItem : INotifyPropertyChanged
+public class NotificationItem
 {
     public int Id { get; set; }
     public string Message { get; set; } = "";
     public NotificationType Type { get; set; }
-    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 public class LogEntry

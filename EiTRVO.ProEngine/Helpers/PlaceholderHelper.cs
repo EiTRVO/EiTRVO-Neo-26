@@ -9,16 +9,17 @@ public static class PlaceholderHelper
         string assetsDir, string assetIndex, string versionType, string accessToken, string uuid, string gameDir)
     {
         return ReplacePlaceholders(arg, playerName, version, assetsDir, assetIndex,
-            versionType, accessToken, uuid, gameDir, null);
+            versionType, accessToken, uuid, gameDir, null, null);
     }
 
     /// <summary>
     /// 替换启动参数中的占位符。当 instanceGameDir 非空时，
     /// ${game_directory} 解析为实例隔离目录而非全局 .minecraft。
+    /// 当 nativesDirectory 非空时，${natives_directory} 被替换为实际路径。
     /// </summary>
     public static string ReplacePlaceholders(string arg, string playerName, string version,
         string assetsDir, string assetIndex, string versionType, string accessToken, string uuid,
-        string gameDir, string? instanceGameDir)
+        string gameDir, string? instanceGameDir, string? nativesDirectory = null)
     {
         string effectiveGameDir = instanceGameDir ?? gameDir;
         // library_directory is a Maven artifact path, always under the global .minecraft/libraries.
@@ -30,6 +31,7 @@ public static class PlaceholderHelper
         static string QuoteIfHasSpace(string value) =>
             value.Contains(' ') ? $"\"{value}\"" : value;
 
+        string nativesDir = nativesDirectory ?? "";
         return arg
             .Replace("${auth_player_name}", playerName)
             .Replace("${version_name}", version)
@@ -45,7 +47,10 @@ public static class PlaceholderHelper
             .Replace("${auth_xuid}", "0")
             .Replace("${user_type}", "msa")
             .Replace("${auth_session}", "0")
-            .Replace("${user_properties}", "{}");
+            .Replace("${user_properties}", "{}")
+            .Replace("${launcher_name}", "eitrvo-neo")
+            .Replace("${launcher_version}", "26")
+            .Replace("${natives_directory}", nativesDir);
     }
 
     /// <summary>Splits a legacy Minecraft arguments string (pre-1.13 format) into individual tokens,

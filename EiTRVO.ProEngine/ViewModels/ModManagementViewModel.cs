@@ -2,10 +2,12 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
@@ -17,6 +19,8 @@ public partial class ModManagementViewModel : BaseViewModel
     private readonly IModrinthService _modrinth;
     private readonly INotificationService _notification;
     private readonly IDialogService _dialogService;
+    private readonly IGameFolderService _gameFolder;
+    private readonly IDispatcherService _dispatcher;
 
     private CancellationTokenSource? _activeDownloadCts;
     private readonly object _downloadLock = new();
@@ -35,6 +39,9 @@ public partial class ModManagementViewModel : BaseViewModel
 
     [ObservableProperty]
     private string _loaderType = "";
+
+    [ObservableProperty]
+    private bool _isResolvingModrinthMetadata;
 
     [ObservableProperty]
     private bool _isEmpty;
@@ -61,17 +68,27 @@ public partial class ModManagementViewModel : BaseViewModel
     /// <summary>Triggers MainWindow to navigate back.</summary>
     public event Action? BackRequested;
 
-    public ModManagementViewModel(IModrinthService modrinth, INotificationService notification, IDialogService dialogService)
+    public ModManagementViewModel(IModrinthService modrinth, INotificationService notification,
+        IDialogService dialogService, IGameFolderService gameFolder, IDispatcherService dispatcher)
     {
         _modrinth = modrinth;
         _notification = notification;
         _dialogService = dialogService;
+        _gameFolder = gameFolder;
+        _dispatcher = dispatcher;
     }
 
     partial void OnSelectedTabChanged(string value)
     {
         OnPropertyChanged(nameof(IsLocalTabVisible));
         OnPropertyChanged(nameof(IsDownloadTabVisible));
+
+        // Auto-load recommended mods on first switch to download tab
+        if (value == "download" && SearchResults.Count == 0 && !IsSearching
+            && !string.IsNullOrEmpty(VersionId))
+        {
+            _ = PerformSearchAsync("");
+        }
     }
 
     /// <summary>Load instance context and scan local mods.</summary>
@@ -100,6 +117,9 @@ public partial class ModManagementViewModel : BaseViewModel
                 Mods.Add(ModEntry.FromFile(file));
 
             IsEmpty = Mods.Count == 0;
+
+            // Background: resolve Modrinth metadata for display-friendly names
+            _ = ResolveModrinthMetadataAsync();
         }
         catch
         {
@@ -156,9 +176,152 @@ public partial class ModManagementViewModel : BaseViewModel
     private static string ComputeSha1(string filePath)
     {
         using var stream = File.OpenRead(filePath);
-        using var sha1 = System.Security.Cryptography.SHA1.Create();
-        byte[] hash = sha1.ComputeHash(stream);
+        byte[] hash = SHA1.HashData(stream);
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Background task: compute SHA-1 for each local .jar, then batch-resolve
+    /// Modrinth project titles and descriptions. Results are written directly
+    /// into <see cref="ModEntry"/> properties — UI updates via binding.
+    /// Failures are silent; unmatched files keep their original display names.
+    /// </summary>
+    private async Task ResolveModrinthMetadataAsync()
+    {
+        int totalJars = 0;
+        int resolvedCount = 0;
+        try
+        {
+            IsResolvingModrinthMetadata = true;
+
+            var jarMods = Mods.Where(m =>
+                m.FullPath.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (jarMods.Count == 0) return;
+            totalJars = jarMods.Count;
+
+            // 1) Compute SHA-1 in parallel (CPU-bound)
+            var sha1Entries = new List<(ModEntry Mod, string Sha1)>(jarMods.Count);
+            await Task.Run(() =>
+            {
+                Parallel.ForEach(jarMods, mod =>
+                {
+                    try
+                    {
+                        string sha1 = ComputeSha1(mod.FullPath);
+                        lock (sha1Entries)
+                            sha1Entries.Add((mod, sha1));
+                    }
+                    catch { /* skip unreadable files */ }
+                });
+            });
+
+            if (sha1Entries.Count == 0) return;
+
+            // 2) Check disk cache first
+            var cache = new LocalModMetadataCache(_gameFolder.GameDir);
+            var cached = cache.GetBatch(sha1Entries.Select(e => e.Sha1));
+
+            // Apply cache hits immediately (on UI thread)
+            var uncached = new List<(ModEntry Mod, string Sha1)>();
+            var cacheHits = new List<(ModEntry Mod, string Title, string Description)>();
+            foreach (var (mod, sha1) in sha1Entries)
+            {
+                if (cached.TryGetValue(sha1, out var meta))
+                    cacheHits.Add((mod, meta.Title, meta.Description));
+                else
+                    uncached.Add((mod, sha1));
+            }
+
+            if (cacheHits.Count > 0)
+            {
+                _dispatcher.Invoke(() =>
+                {
+                    foreach (var (mod, title, desc) in cacheHits)
+                    {
+                        mod.ModrinthTitle = title;
+                        mod.ModrinthDescription = desc;
+                        mod.NotifyDisplayPropertiesChanged();
+                    }
+                });
+            }
+            if (uncached.Count == 0) return;
+
+            // 3) Batch API lookup: SHA-1 → VersionFile (project_id)
+            var sha1ToVersionFile = await _modrinth.GetVersionFilesByHashesAsync(
+                uncached.Select(e => e.Sha1).ToList());
+
+            if (sha1ToVersionFile.Count == 0) return;
+
+            // 4) Collect unique project IDs, then batch lookup projects
+            var sha1ToProjectId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var projectIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (mod, sha1) in uncached)
+            {
+                if (sha1ToVersionFile.TryGetValue(sha1, out var vf) && !string.IsNullOrEmpty(vf.ProjectId))
+                {
+                    sha1ToProjectId[sha1] = vf.ProjectId;
+                    projectIds.Add(vf.ProjectId);
+                }
+            }
+
+            if (projectIds.Count == 0) return;
+
+            var projects = await _modrinth.GetProjectsByIdsAsync(projectIds.ToList());
+            var projectMap = projects
+                .Where(p => !string.IsNullOrEmpty(p.Id))
+                .ToDictionary(p => p.Id, p => p, StringComparer.OrdinalIgnoreCase);
+
+            // 5) Apply results to ModEntry (on UI thread) + collect cache entries
+            var newCacheEntries = new List<(string Sha1, string Title, string Description)>();
+            var resolvedMods = new List<(ModEntry Mod, string Title, string Description)>();
+            foreach (var (mod, sha1) in uncached)
+            {
+                if (sha1ToProjectId.TryGetValue(sha1, out var pid) && projectMap.TryGetValue(pid, out var proj))
+                {
+                    resolvedMods.Add((mod, proj.Title, proj.Description));
+                    newCacheEntries.Add((sha1, proj.Title, proj.Description));
+                }
+            }
+
+            if (resolvedMods.Count > 0)
+            {
+                _dispatcher.Invoke(() =>
+                {
+                    foreach (var (mod, title, desc) in resolvedMods)
+                    {
+                        mod.ModrinthTitle = title;
+                        mod.ModrinthDescription = desc;
+                        mod.NotifyDisplayPropertiesChanged();
+                    }
+                });
+            }
+
+            // Persist cache
+            if (newCacheEntries.Count > 0)
+            {
+                cache.PutBatch(newCacheEntries);
+                cache.Save();
+            }
+
+            // Report completion
+            resolvedCount = cacheHits.Count + resolvedMods.Count;
+            if (resolvedCount > 0)
+            {
+                _notification.AppendLog(
+                    $"SHA1 识别完成：{resolvedCount}/{totalJars} 个模组已关联 Modrinth 元数据",
+                    NotificationType.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            _notification.AppendLog(
+                $"Modrinth 元数据解析失败（{resolvedCount}/{totalJars}，将显示文件名）：{ex.Message}",
+                NotificationType.Warning);
+        }
+        finally
+        {
+            IsResolvingModrinthMetadata = false;
+        }
     }
 
     [RelayCommand]
@@ -224,8 +387,13 @@ public partial class ModManagementViewModel : BaseViewModel
     [RelayCommand]
     private async Task SearchAsync()
     {
-        if (string.IsNullOrWhiteSpace(SearchQuery)) return;
+        await PerformSearchAsync(SearchQuery.Trim());
+    }
 
+    /// <summary>Execute a Modrinth search and populate <see cref="SearchResults"/>.</summary>
+    /// <param name="query">Search query (empty string returns popular/recommended mods).</param>
+    private async Task PerformSearchAsync(string query)
+    {
         IsSearching = true;
         HasNoResults = false;
         TotalSearchResults = 0;
@@ -233,7 +401,7 @@ public partial class ModManagementViewModel : BaseViewModel
 
         try
         {
-            await SearchModrinthAsync(SearchQuery.Trim(), null);
+            await SearchModrinthAsync(query, null);
 
             HasNoResults = SearchResults.Count == 0;
         }

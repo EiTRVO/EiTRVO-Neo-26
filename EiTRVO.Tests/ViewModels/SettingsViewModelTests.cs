@@ -145,4 +145,87 @@ public class SettingsViewModelTests
         // ManualJavaPath should NOT be set
         Assert.IsNull(vm.ManualJavaPath);
     }
+
+    // ================================================================
+    // DisableChunkedDownload / DebugMode / WizardCompleted
+    // ================================================================
+
+    [TestMethod]
+    public void DisableChunkedDownload_PropagatesToModrinth()
+    {
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+        Assert.IsFalse(_modrinth.ForceSingleConnection);
+
+        vm.DisableChunkedDownload = true;
+        Assert.IsTrue(_modrinth.ForceSingleConnection);
+
+        vm.DisableChunkedDownload = false;
+        Assert.IsFalse(_modrinth.ForceSingleConnection);
+    }
+
+    [TestMethod]
+    public void DebugMode_RoundTrip()
+    {
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+        vm.DebugMode = true;
+
+        var settings = vm.ToSettings();
+        Assert.IsTrue(settings.DebugMode);
+
+        var vm2 = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+        vm2.ApplySettings(settings);
+        Assert.IsTrue(vm2.DebugMode);
+    }
+
+    [TestMethod]
+    public void DebugMode_RoundTrip_StaysFalseByDefault()
+    {
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+        var result = vm.ToSettings();
+        Assert.IsFalse(result.DebugMode);
+    }
+
+    // ================================================================
+    // BackupNow / Restore Events
+    // ================================================================
+
+    [TestMethod]
+    public async Task BackupNow_RaisesEvent()
+    {
+        _dialog.FolderBrowserResult = @"C:\ManualBackup";
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+
+        string? receivedPath = null;
+        vm.ManualBackupRequested += path => receivedPath = path;
+
+        await vm.BackupNowCommand.ExecuteAsync(null);
+
+        Assert.AreEqual(@"C:\ManualBackup", receivedPath);
+    }
+
+    [TestMethod]
+    public async Task Restore_WithFile_RaisesEvent()
+    {
+        _dialog.OpenFileResult = @"C:\backup.eibak";
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+
+        await vm.BrowseRestoreFileCommand.ExecuteAsync(null);
+
+        // RestoreFilePath is a VM property, verified directly
+        Assert.AreEqual(@"C:\backup.eibak", vm.RestoreFilePath);
+    }
+
+    [TestMethod]
+    public async Task BackupNow_Cancelled_DoesNotRaiseEvent()
+    {
+        _dialog.FolderBrowserResult = null;
+        var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
+
+        bool eventRaised = false;
+        vm.ManualBackupRequested += _ => eventRaised = true;
+
+        await vm.BackupNowCommand.ExecuteAsync(null);
+
+        Assert.IsFalse(eventRaised, "Cancelled dialog should not raise BackupNow event.");
+    }
 }

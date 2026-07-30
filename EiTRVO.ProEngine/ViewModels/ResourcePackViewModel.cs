@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
@@ -114,6 +115,18 @@ public partial class ResourcePackViewModel : BaseViewModel
         OnPropertyChanged(nameof(IsShaderLocalVisible));
         OnPropertyChanged(nameof(IsResourceDownloadVisible));
         OnPropertyChanged(nameof(IsShaderDownloadVisible));
+
+        // Auto-load recommended content on first switch to download tabs
+        if (value == "resource-download" && ResourceSearchResults.Count == 0
+            && !IsResourceSearching && !string.IsNullOrEmpty(_versionId))
+        {
+            _ = PerformResourceSearchAsync("");
+        }
+        else if (value == "shader-download" && ShaderSearchResults.Count == 0
+            && !IsShaderSearching && !string.IsNullOrEmpty(_versionId))
+        {
+            _ = PerformShaderSearchAsync("");
+        }
     }
 
     /// <summary>Load instance context and scan resource/shader pack folders.</summary>
@@ -309,10 +322,9 @@ public partial class ResourcePackViewModel : BaseViewModel
 
     // === Download Commands — Resource Packs ===
 
-    [RelayCommand]
-    private async Task SearchResourcePacksAsync()
+    /// <summary>Search resource packs by query. Empty query returns popular/recommended content.</summary>
+    private async Task PerformResourceSearchAsync(string query)
     {
-        if (string.IsNullOrWhiteSpace(ResourceSearchQuery)) return;
         IsResourceSearching = true;
         ResourceHasNoResults = false;
         ResourceTotalResults = 0;
@@ -320,7 +332,7 @@ public partial class ResourcePackViewModel : BaseViewModel
         try
         {
             var response = await _modrinth.SearchProjectsAsync(
-                ResourceSearchQuery.Trim(), _versionId, "resourcepack");
+                query, _versionId, "resourcepack");
             ResourceTotalResults = response.TotalHits;
             foreach (var hit in response.Hits)
             {
@@ -339,6 +351,13 @@ public partial class ResourcePackViewModel : BaseViewModel
         }
         catch (Exception ex) { _notification.Show($"搜索失败：{ex.Message}", NotificationType.Error); }
         finally { IsResourceSearching = false; }
+    }
+
+    [RelayCommand]
+    private async Task SearchResourcePacksAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ResourceSearchQuery)) return;
+        await PerformResourceSearchAsync(ResourceSearchQuery.Trim());
     }
 
     [RelayCommand]
@@ -386,8 +405,10 @@ public partial class ResourcePackViewModel : BaseViewModel
             });
 
             Directory.CreateDirectory(ResourcePacksFolder);
-            string destPath = Path.Combine(ResourcePacksFolder, file.Filename);
-            statusProgress.Report($"下载: {file.Filename}");
+            string safeName = Path.GetFileName(file.Filename);
+            string destPath = Path.Combine(ResourcePacksFolder, safeName);
+            PathSafetyHelper.ValidateContained(destPath, ResourcePacksFolder);
+            statusProgress.Report($"下载: {safeName}");
 
             await _modrinth.DownloadModAsync(file.Url, destPath, fileProgress, cts.Token);
 
@@ -424,10 +445,9 @@ public partial class ResourcePackViewModel : BaseViewModel
 
     // === Download Commands — Shader Packs ===
 
-    [RelayCommand]
-    private async Task SearchShaderPacksAsync()
+    /// <summary>Search shader packs by query. Empty query returns popular/recommended content.</summary>
+    private async Task PerformShaderSearchAsync(string query)
     {
-        if (string.IsNullOrWhiteSpace(ShaderSearchQuery)) return;
         IsShaderSearching = true;
         ShaderHasNoResults = false;
         ShaderTotalResults = 0;
@@ -435,7 +455,7 @@ public partial class ResourcePackViewModel : BaseViewModel
         try
         {
             var response = await _modrinth.SearchProjectsAsync(
-                ShaderSearchQuery.Trim(), _versionId, "shader");
+                query, _versionId, "shader");
             ShaderTotalResults = response.TotalHits;
             foreach (var hit in response.Hits)
             {
@@ -454,6 +474,13 @@ public partial class ResourcePackViewModel : BaseViewModel
         }
         catch (Exception ex) { _notification.Show($"搜索失败：{ex.Message}", NotificationType.Error); }
         finally { IsShaderSearching = false; }
+    }
+
+    [RelayCommand]
+    private async Task SearchShaderPacksAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ShaderSearchQuery)) return;
+        await PerformShaderSearchAsync(ShaderSearchQuery.Trim());
     }
 
     [RelayCommand]
@@ -501,8 +528,10 @@ public partial class ResourcePackViewModel : BaseViewModel
             });
 
             Directory.CreateDirectory(ShaderPacksFolder);
-            string destPath = Path.Combine(ShaderPacksFolder, file.Filename);
-            statusProgress.Report($"下载: {file.Filename}");
+            string safeName = Path.GetFileName(file.Filename);
+            string destPath = Path.Combine(ShaderPacksFolder, safeName);
+            PathSafetyHelper.ValidateContained(destPath, ShaderPacksFolder);
+            statusProgress.Report($"下载: {safeName}");
 
             await _modrinth.DownloadModAsync(file.Url, destPath, fileProgress, cts.Token);
 

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
 using EiTRVO.ProEngine.ViewModels;
@@ -43,56 +45,28 @@ public class HomeViewModelTests : IDisposable
     public void Constructor_InitializesDefaults()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
-        Assert.AreEqual("Player", vm.PlayerName);
-        Assert.AreEqual(2048, vm.Memory);
-        Assert.IsFalse(vm.UseMicrosoft);
+        Assert.AreEqual(EiTRVO.ProEngine.Helpers.SystemMemoryInfo.RecommendedDefaultMemoryMB, vm.Memory);
         Assert.IsFalse(vm.IsLaunching);
-    }
-
-    [TestMethod]
-    public void PlayerName_Set_UpdatesProperty()
-    {
-        var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
-
-        vm.PlayerName = "TestPlayer";
-        Assert.AreEqual("TestPlayer", vm.PlayerName);
+        Assert.IsFalse(vm.IsGameRunning);
     }
 
     [TestMethod]
     public void Memory_Set_UpdatesProperty()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         vm.Memory = 8192;
         Assert.AreEqual(8192, vm.Memory);
     }
 
     [TestMethod]
-    public void UseMicrosoft_Toggle_UpdatesComputedProperties()
-    {
-        var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
-
-        vm.UseMicrosoft = true;
-        Assert.IsTrue(vm.UseMicrosoft);
-        Assert.IsTrue(vm.IsMicrosoftMode);
-        Assert.IsFalse(vm.IsOfflineMode);
-
-        vm.UseMicrosoft = false;
-        Assert.IsFalse(vm.UseMicrosoft);
-        Assert.IsFalse(vm.IsMicrosoftMode);
-        Assert.IsTrue(vm.IsOfflineMode);
-    }
-
-    [TestMethod]
     public void Instances_ExposedFromInstanceManager()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         Assert.IsNotNull(vm.LocalInstances);
         Assert.AreEqual(0, vm.LocalInstances.Count);
@@ -102,7 +76,7 @@ public class HomeViewModelTests : IDisposable
     public void Accounts_ExposedFromAccountManager()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         Assert.IsNotNull(vm.Accounts);
         Assert.AreEqual(0, vm.Accounts.Count);
@@ -116,7 +90,7 @@ public class HomeViewModelTests : IDisposable
     public void BuyMinecraftReminder_NullCallback_NoException()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         // Callback is null by default — setting it to null should not cause issues
         vm.BuyMinecraftReminder = null;
@@ -127,7 +101,7 @@ public class HomeViewModelTests : IDisposable
     public async Task BuyMinecraftReminder_CallbackSet_InvokedWhenNeeded()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         bool wasCalled = false;
         vm.BuyMinecraftReminder = () =>
@@ -148,7 +122,7 @@ public class HomeViewModelTests : IDisposable
     public void BuyMinecraftReminder_Property_SetGet()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         Func<Task>? callback = () => Task.CompletedTask;
         vm.BuyMinecraftReminder = callback;
@@ -159,7 +133,7 @@ public class HomeViewModelTests : IDisposable
     public void Constructor_ReminderCallback_DefaultsToNull()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         Assert.IsNull(vm.BuyMinecraftReminder);
     }
@@ -168,7 +142,7 @@ public class HomeViewModelTests : IDisposable
     public void Constructor_SaveUnlockHandler_DefaultsToNull()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         Assert.IsNull(vm.SaveUnlockHandler);
     }
@@ -181,26 +155,32 @@ public class HomeViewModelTests : IDisposable
     public async Task Launch_NoInstance_ShowsWarning()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
+        // Add an offline account so account check passes
+        var account = new EiTRVO.ProEngine.Models.Account
+        {
+            Type = EiTRVO.ProEngine.Models.AccountType.Offline,
+            Username = "TestPlayer",
+            UUID = EiTRVO.ProEngine.Helpers.UuidHelper.OfflineUuid("TestPlayer")
+        };
+        _accountManager.Accounts.Add(account);
+        vm.SelectedAccount = account;
         vm.SelectedInstance = null;
         vm.SelectedJava = new EiTRVO.ProEngine.Models.JavaInfo { Path = "java.exe", Version = "21" };
-        vm.PlayerName = "TestPlayer";
         vm.Memory = 2048;
 
         await vm.LaunchCommand.ExecuteAsync(null);
 
-        if (_notification.LastShowMessage != null)
-        {
-            StringAssert.Contains(_notification.LastShowMessage, "实例");
-        }
+        Assert.IsNotNull(_notification.LastShowMessage, "Expected a warning notification when no instance is selected.");
+        StringAssert.Contains(_notification.LastShowMessage, "实例");
     }
 
     [TestMethod]
     public async Task Launch_NoJava_ShowsWarning()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         var instance = new EiTRVO.ProEngine.Models.GameInstance
         {
@@ -208,30 +188,30 @@ public class HomeViewModelTests : IDisposable
             VersionId = "1.21"
         };
         _instanceManager.Instances.Add(instance);
+
+        var account = new EiTRVO.ProEngine.Models.Account
+        {
+            Type = EiTRVO.ProEngine.Models.AccountType.Offline,
+            Username = "TestPlayer",
+            UUID = EiTRVO.ProEngine.Helpers.UuidHelper.OfflineUuid("TestPlayer")
+        };
+        _accountManager.Accounts.Add(account);
+        vm.SelectedAccount = account;
         vm.SelectedInstance = instance;
         vm.SelectedJava = null;
-        vm.PlayerName = "TestPlayer";
         vm.Memory = 2048;
 
-        try
-        {
-            await vm.LaunchCommand.ExecuteAsync(null);
-        }
-        catch (System.Resources.MissingManifestResourceException)
-        {
-            return; // Guard triggered
-        }
-        if (_notification.LastShowMessage != null)
-        {
-            StringAssert.Contains(_notification.LastShowMessage, "Java");
-        }
+        await vm.LaunchCommand.ExecuteAsync(null);
+
+        Assert.IsNotNull(_notification.LastShowMessage, "Expected a warning notification when no Java is selected.");
+        StringAssert.Contains(_notification.LastShowMessage, "Java");
     }
 
     [TestMethod]
     public async Task Launch_MemoryExceedsLimit_ShowsWarning()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         var instance = new EiTRVO.ProEngine.Models.GameInstance
         {
@@ -239,9 +219,17 @@ public class HomeViewModelTests : IDisposable
             VersionId = "1.21"
         };
         _instanceManager.Instances.Add(instance);
+
+        var account = new EiTRVO.ProEngine.Models.Account
+        {
+            Type = EiTRVO.ProEngine.Models.AccountType.Offline,
+            Username = "TestPlayer",
+            UUID = EiTRVO.ProEngine.Helpers.UuidHelper.OfflineUuid("TestPlayer")
+        };
+        _accountManager.Accounts.Add(account);
+        vm.SelectedAccount = account;
         vm.SelectedInstance = instance;
         vm.SelectedJava = new EiTRVO.ProEngine.Models.JavaInfo { Path = "java.exe", Version = "21" };
-        vm.PlayerName = "TestPlayer";
         vm.Memory = 40000; // exceeds 32768
 
         await vm.LaunchCommand.ExecuteAsync(null);
@@ -252,10 +240,10 @@ public class HomeViewModelTests : IDisposable
     }
 
     [TestMethod]
-    public async Task Launch_InvalidPlayerName_TooShort_ShowsWarning()
+    public async Task Launch_NoAccount_ShowsWarning()
     {
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         var instance = new EiTRVO.ProEngine.Models.GameInstance
         {
@@ -265,39 +253,13 @@ public class HomeViewModelTests : IDisposable
         _instanceManager.Instances.Add(instance);
         vm.SelectedInstance = instance;
         vm.SelectedJava = new EiTRVO.ProEngine.Models.JavaInfo { Path = "java.exe", Version = "21" };
-        vm.UseMicrosoft = false;
-        vm.PlayerName = "ab"; // too short (min 3)
-        vm.Memory = 2048;
-
-        await vm.LaunchCommand.ExecuteAsync(null);
-
-        // Player name check uses a hardcoded string (not localized)
-        Assert.IsNotNull(_notification.LastShowMessage);
-        StringAssert.Contains(_notification.LastShowMessage!, "3-16");
-    }
-
-    [TestMethod]
-    public async Task Launch_PlayerNameSpecialChars_ShowsWarning()
-    {
-        var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
-
-        var instance = new EiTRVO.ProEngine.Models.GameInstance
-        {
-            Name = "TestInstance",
-            VersionId = "1.21"
-        };
-        _instanceManager.Instances.Add(instance);
-        vm.SelectedInstance = instance;
-        vm.SelectedJava = new EiTRVO.ProEngine.Models.JavaInfo { Path = "java.exe", Version = "21" };
-        vm.UseMicrosoft = false;
-        vm.PlayerName = "test@name"; // @ not allowed
+        vm.SelectedAccount = null;
         vm.Memory = 2048;
 
         await vm.LaunchCommand.ExecuteAsync(null);
 
         Assert.IsNotNull(_notification.LastShowMessage);
-        StringAssert.Contains(_notification.LastShowMessage!, "3-16");
+        StringAssert.Contains(_notification.LastShowMessage!, "账号");
     }
 
     // ================================================================
@@ -316,7 +278,7 @@ public class HomeViewModelTests : IDisposable
         _accountManager.Accounts.Add(msAccount);
 
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         vm.BuyMinecraftReminder = () => Task.CompletedTask;
 
@@ -335,7 +297,7 @@ public class HomeViewModelTests : IDisposable
         _accountManager.Accounts.Clear();
 
         var vm = new HomeViewModel(
-            _launchOrchestrator, _notification, _accountManager, _instanceManager);
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
 
         bool callbackCalled = false;
         vm.BuyMinecraftReminder = () =>
@@ -348,5 +310,41 @@ public class HomeViewModelTests : IDisposable
         Assert.IsNotNull(vm.BuyMinecraftReminder);
         await vm.BuyMinecraftReminder();
         Assert.IsTrue(callbackCalled);
+    }
+
+    // ================================================================
+    // LoadLastLaunchAsync — DPAPI persist/restore
+    // ================================================================
+
+    [TestMethod]
+    public async Task LoadLastLaunch_NoFile_SilentNoOp()
+    {
+        // Ensure no last_launch.json file exists
+        string lastLaunchPath = Path.Combine(_tempDir, "last_launch.json");
+        if (File.Exists(lastLaunchPath)) File.Delete(lastLaunchPath);
+
+        var vm = new HomeViewModel(
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
+
+        await vm.LoadLastLaunchAsync();
+
+        // Should not crash and should not set any last launch data
+        Assert.IsTrue(string.IsNullOrEmpty(vm.LastLaunchedInstanceName));
+    }
+
+    [TestMethod]
+    public async Task LoadLastLaunch_CorruptFile_SilentNoOp()
+    {
+        // Write random bytes (not valid DPAPI or JSON)
+        string lastLaunchPath = Path.Combine(_tempDir, "last_launch.json");
+        File.WriteAllBytes(lastLaunchPath, new byte[] { 1, 2, 3, 4, 5 });
+
+        var vm = new HomeViewModel(
+            _launchOrchestrator, _notification, _accountManager, _instanceManager, _gameFolder);
+
+        // Should not throw
+        await vm.LoadLastLaunchAsync();
+
+        Assert.IsTrue(string.IsNullOrEmpty(vm.LastLaunchedInstanceName));
     }
 }

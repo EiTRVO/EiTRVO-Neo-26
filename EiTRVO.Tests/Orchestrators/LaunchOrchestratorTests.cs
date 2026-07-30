@@ -515,6 +515,280 @@ public class LaunchOrchestratorTests : IDisposable
     }
 
     // ================================================================
+    // VerifyModsAsync
+    // ================================================================
+
+    [TestMethod]
+    public async Task VerifyMods_VanillaLoader_ReturnsNull()
+    {
+        var instance = new GameInstance { LoaderType = "Vanilla", VersionId = "1.21" };
+        var result = await _orchestrator.VerifyModsAsync(instance, null);
+        Assert.IsNull(result, "Vanilla instance should skip verification entirely.");
+    }
+
+    [TestMethod]
+    public async Task VerifyMods_NullLoaderType_ReturnsNull()
+    {
+        var instance = new GameInstance { LoaderType = null, VersionId = "1.21" };
+        var result = await _orchestrator.VerifyModsAsync(instance, null);
+        Assert.IsNull(result, "Null loader type should skip verification.");
+    }
+
+    [TestMethod]
+    public async Task VerifyMods_NoModsDir_ReturnsNull()
+    {
+        var instance = new GameInstance { LoaderType = "Forge", VersionId = "1.21" };
+        var result = await _orchestrator.VerifyModsAsync(instance, null);
+        Assert.IsNull(result, "Missing mods directory should skip verification.");
+    }
+
+    [TestMethod]
+    public async Task VerifyMods_EmptyModsDir_ReturnsNull()
+    {
+        string modsDir = Path.Combine(_tempGameDir, "mods");
+        Directory.CreateDirectory(modsDir);
+
+        var instance = new GameInstance { LoaderType = "Forge", VersionId = "1.21" };
+        var result = await _orchestrator.VerifyModsAsync(instance, null);
+        Assert.IsNull(result, "Empty mods directory should skip verification.");
+    }
+
+    [TestMethod]
+    public async Task VerifyMods_AllVerified_ReturnsNull()
+    {
+        // Create a test JAR and compute its SHA-1
+        string modsDir = Path.Combine(_tempGameDir, "mods");
+        Directory.CreateDirectory(modsDir);
+        string jarPath = Path.Combine(modsDir, "test-mod.jar");
+        string jarContent = "fake jar content for hash";
+        File.WriteAllText(jarPath, jarContent);
+        string sha1 = Convert.ToHexString(
+            System.Security.Cryptography.SHA1.HashData(
+                System.Text.Encoding.UTF8.GetBytes(jarContent))).ToLowerInvariant();
+
+        // Configure FakeModrinthService to return a match
+        var fakeModrinth = new FakeModrinthService
+        {
+            GetVersionFilesByHashesResult = new Dictionary<string, VersionFileResponse>
+            {
+                [sha1] = new VersionFileResponse { Id = "vf-1", ProjectId = "proj-1", VersionId = "ver-1" }
+            }
+        };
+
+        // Create orchestrator with the configured fake
+        var orchestrator = CreateTestOrchestrator(fakeModrinth);
+
+        var instance = new GameInstance { LoaderType = "Forge", VersionId = "1.21" };
+        var result = await orchestrator.VerifyModsAsync(instance, null);
+        Assert.IsNull(result, "All mods verified should return null (no warning needed).");
+    }
+
+    [TestMethod]
+    public async Task VerifyMods_SomeUnverified_UserApproves_ReturnsNull()
+    {
+        string modsDir = Path.Combine(_tempGameDir, "mods");
+        Directory.CreateDirectory(modsDir);
+        string jarPath = Path.Combine(modsDir, "unverified-mod.jar");
+        File.WriteAllText(jarPath, "unknown mod content");
+
+        // Empty response → no SHA-1s match
+        var fakeModrinth = new FakeModrinthService
+        {
+            GetVersionFilesByHashesResult = new Dictionary<string, VersionFileResponse>()
+        };
+
+        var orchestrator = CreateTestOrchestrator(fakeModrinth);
+        bool handlerCalled = false;
+        orchestrator.ModsWarningHandler = (files) =>
+        {
+            handlerCalled = true;
+            Assert.AreEqual(1, files.Count);
+            return Task.FromResult(true); // user approves
+        };
+
+        var instance = new GameInstance { LoaderType = "Forge", VersionId = "1.21" };
+        var result = await orchestrator.VerifyModsAsync(instance, null);
+        Assert.IsNull(result, "User approved → should return null.");
+        Assert.IsTrue(handlerCalled, "ModsWarningHandler should have been called.");
+    }
+
+    [TestMethod]
+    public async Task VerifyMods_UserDeclines_ReturnsLaunchResult()
+    {
+        string modsDir = Path.Combine(_tempGameDir, "mods");
+        Directory.CreateDirectory(modsDir);
+        File.WriteAllText(Path.Combine(modsDir, "suspicious.jar"), "suspicious content");
+
+        var fakeModrinth = new FakeModrinthService
+        {
+            GetVersionFilesByHashesResult = new Dictionary<string, VersionFileResponse>()
+        };
+
+        var orchestrator = CreateTestOrchestrator(fakeModrinth);
+        orchestrator.ModsWarningHandler = (files) => Task.FromResult(false); // user declines
+
+        var instance = new GameInstance { LoaderType = "Forge", VersionId = "1.21" };
+        var result = await orchestrator.VerifyModsAsync(instance, null);
+        Assert.IsNotNull(result, "User declined → should return LaunchResult.");
+        Assert.IsFalse(result!.Success, "LaunchResult.Success should be false.");
+        StringAssert.Contains(result.ErrorMessage!, "suspicious.jar");
+    }
+
+    [TestMethod]
+    public async Task VerifyMods_ApiError_SilentlyReturnsNull()
+    {
+        string modsDir = Path.Combine(_tempGameDir, "mods");
+        Directory.CreateDirectory(modsDir);
+        File.WriteAllText(Path.Combine(modsDir, "test.jar"), "content");
+
+        var fakeModrinth = new FakeModrinthService
+        {
+            GetVersionFilesByHashesThrows = new HttpRequestException("Network error")
+        };
+
+        var orchestrator = CreateTestOrchestrator(fakeModrinth);
+
+        var instance = new GameInstance { LoaderType = "Forge", VersionId = "1.21" };
+        var result = await orchestrator.VerifyModsAsync(instance, null);
+        Assert.IsNull(result, "API error should be silently swallowed.");
+    }
+
+    [TestMethod]
+    public async Task VerifyMods_IsolatedInstance_UsesInstanceDir()
+    {
+        string isolatedDir = Path.Combine(_tempGameDir, "instances", "test-instance");
+        string modsDir = Path.Combine(isolatedDir, "mods");
+        Directory.CreateDirectory(modsDir);
+        File.WriteAllText(Path.Combine(modsDir, "isolated-mod.jar"), "content");
+
+        var fakeModrinth = new FakeModrinthService
+        {
+            GetVersionFilesByHashesResult = new Dictionary<string, VersionFileResponse>()
+        };
+
+        var orchestrator = CreateTestOrchestrator(fakeModrinth);
+        int warnedFileCount = 0;
+        orchestrator.ModsWarningHandler = (files) =>
+        {
+            warnedFileCount = files.Count;
+            return Task.FromResult(true);
+        };
+
+        var instance = new GameInstance
+        {
+            LoaderType = "Fabric",
+            VersionId = "1.21",
+            UseIsolatedDir = true,
+            InstanceDir = isolatedDir
+        };
+
+        await orchestrator.VerifyModsAsync(instance, null);
+        Assert.AreEqual(1, warnedFileCount, "Isolated instance mods should be found.");
+    }
+
+    private LaunchOrchestrator CreateTestOrchestrator(FakeModrinthService modrinth)
+    {
+        return new LaunchOrchestrator(
+            new HttpClient(),
+            new FakeAuthService(),
+            new FakeModLoaderService(),
+            _notificationService,
+            _gameFolder,
+            new SaveLockService(),
+            modrinth);
+    }
+
+    // ================================================================
+    // B1: JVM arg trimming
+    // ================================================================
+
+    [TestMethod]
+    public void BuildLaunchArgs_JvmArgWithSpaces_Trimmed()
+    {
+        // Simulate Fabric API's malformed JVM arg with leading/trailing spaces
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            "-DFabricMcEmu= net.minecraft.client.main.Main "
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        // The trimmed arg should be present
+        CollectionAssert.Contains(args, "-DFabricMcEmu=net.minecraft.client.main.Main",
+            "JVM arg with spaces should be trimmed");
+        // The original untrimmed arg should NOT be present
+        Assert.IsFalse(args.Any(a => a.Contains(" net.minecraft")),
+            "No arg should contain leading space before net.minecraft");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_LeadingTrailingSpaces_Removed()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            "  -Dfoo=bar  "
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        CollectionAssert.Contains(args, "-Dfoo=bar",
+            "JVM arg with surrounding spaces should be trimmed");
+    }
+
+    // ================================================================
+    // B4: Arch rule filtering (integration tests)
+    // ================================================================
+
+    [TestMethod]
+    public void BuildLaunchArgs_ArchRuleX86_On64Bit_Filtered()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            new
+            {
+                rules = new[] { new { action = "allow", os = new { arch = "x86" } } },
+                value = "-Xss1M"
+            }
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        if (Environment.Is64BitOperatingSystem)
+            Assert.IsFalse(args.Contains("-Xss1M"),
+                "-Xss1M with arch=x86 rule should be filtered on 64-bit OS");
+        else
+            CollectionAssert.Contains(args, "-Xss1M",
+                "-Xss1M with arch=x86 rule should pass on 32-bit OS");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_ArchRuleX86_WithOsWindows()
+    {
+        var detail = CreateMinimalDetailWithJvmArgs(new object[]
+        {
+            new
+            {
+                rules = new[] { new { action = "allow", os = new { name = "windows", arch = "x86" } } },
+                value = "-Dlegacy.flag=true"
+            }
+        });
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.21", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        bool expected = OperatingSystem.IsWindows() && !Environment.Is64BitOperatingSystem;
+        Assert.AreEqual(expected, args.Contains("-Dlegacy.flag=true"),
+            "JVM arg with os=windows+arch=x86 should only pass on 32-bit Windows");
+    }
+
+    // ================================================================
     // Helpers
     // ================================================================
 

@@ -27,9 +27,12 @@ public partial class ModpackDownloadViewModel : BaseViewModel
     private readonly IGameFolderService _gameFolder;
     private readonly InstanceManager _instanceManager;
     private readonly HttpClient _httpClient;
+    private readonly JavaDetectionService _javaDetection;
 
     private CancellationTokenSource? _activeDownloadCts;
     private readonly object _downloadLock = new();
+    private CancellationTokenSource? _searchCts;
+    private readonly object _searchLock = new();
 
     // === Observable Properties ===
 
@@ -66,11 +69,31 @@ public partial class ModpackDownloadViewModel : BaseViewModel
     [ObservableProperty]
     private string _currentFileProgress = "";
 
+    [ObservableProperty]
+    private double _fileProgressValue;
+
+    [ObservableProperty]
+    private bool _isFileProgressIndeterminate;
+
+    [ObservableProperty]
+    private string _versionDisplay = "";
+
+    [ObservableProperty]
+    private string _loaderDisplay = "";
+
     // === Events for MainWindow ===
 
     public event Action? BackRequested;
     public event Action<bool>? DownloadProgressChanged;
-    public event Action<DownloadProgress>? FileProgressUpdated;
+
+    /// <summary>Java 兼容性检查（下载流程）— 由 MainWindow 注入。</summary>
+    public Func<string, string, Task<string?>>? DownloadJavaCompatibilityHandler { get; set; }
+
+    /// <summary>设置提供者 — 由 MainWindow 注入。</summary>
+    public Func<LauncherSettings>? SettingsProvider { get; set; }
+
+    /// <summary>Java 自动检测回调 — 由 MainWindow 注入，将自动检测到的 Java 保存到设置。</summary>
+    public Func<JavaInfo, Task>? JavaDetectedCallback { get; set; }
 
     // === Collections ===
 
@@ -92,7 +115,8 @@ public partial class ModpackDownloadViewModel : BaseViewModel
         INotificationService notificationService,
         IGameFolderService gameFolder,
         InstanceManager instanceManager,
-        HttpClient httpClient)
+        HttpClient httpClient,
+        JavaDetectionService javaDetection)
     {
         _modrinth = modrinth;
         _downloadService = downloadService;
@@ -101,16 +125,43 @@ public partial class ModpackDownloadViewModel : BaseViewModel
         _gameFolder = gameFolder;
         _instanceManager = instanceManager;
         _httpClient = httpClient;
+        _javaDetection = javaDetection;
     }
 
     /// <summary>初始化 MC 版本列表。</summary>
     public async Task InitializeAsync()
     {
         _allManifestVersions = await LoadVersionManifestCachedAsync();
-        var ids = _allManifestVersions.Select(v => v.Id).ToList();
+        var ids = _allManifestVersions
+            .Where(v => v.Type == "release")
+            .Select(v => v.Id).ToList();
         MinecraftVersions = new ObservableCollection<string>(ids);
         SelectedMcVersion = _allManifestVersions
             .FirstOrDefault(v => v.Type == "release")?.Id;
+
+        // Auto-load recommended modpacks for the selected MC version
+        _ = PerformSearchAsync("");
+    }
+
+    /// <summary>When the user switches MC version, cancel any in-flight search and
+    /// immediately refresh results for the new version.</summary>
+    partial void OnSelectedMcVersionChanged(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        _ = RefreshSearchAsync();
+    }
+
+    private async Task RefreshSearchAsync()
+    {
+        CancellationTokenSource cts;
+        lock (_searchLock)
+        {
+            _searchCts?.Cancel();
+            _searchCts?.Dispose();
+            _searchCts = new CancellationTokenSource();
+            cts = _searchCts;
+        }
+        await PerformSearchAsync(SearchQuery.Trim(), cts.Token);
     }
 
     // === Commands ===
@@ -121,8 +172,14 @@ public partial class ModpackDownloadViewModel : BaseViewModel
     [RelayCommand]
     private async Task SearchModpacksAsync()
     {
-        if (string.IsNullOrWhiteSpace(SearchQuery)) return;
+        await PerformSearchAsync(SearchQuery.Trim());
+    }
 
+    /// <summary>Execute a search against Modrinth and populate <see cref="SearchResults"/>.</summary>
+    /// <param name="query">Search query (empty string returns popular/recommended modpacks).</param>
+    /// <param name="ct">Cancellation token for race-condition protection.</param>
+    private async Task PerformSearchAsync(string query, CancellationToken ct = default)
+    {
         IsSearching = true;
         HasNoResults = false;
         TotalSearchResults = 0;
@@ -131,8 +188,7 @@ public partial class ModpackDownloadViewModel : BaseViewModel
         try
         {
             string mcVersion = SelectedMcVersion ?? "";
-            var response = await _modrinth.SearchModpacksAsync(
-                SearchQuery.Trim(), mcVersion);
+            var response = await _modrinth.SearchModpacksAsync(query, mcVersion, ct: ct);
 
             TotalSearchResults = response.TotalHits;
 
@@ -162,6 +218,10 @@ public partial class ModpackDownloadViewModel : BaseViewModel
             }
 
             HasNoResults = SearchResults.Count == 0;
+        }
+        catch (OperationCanceledException)
+        {
+            // Search was superseded by a newer request — silently ignore
         }
         catch (Exception ex)
         {
@@ -194,6 +254,9 @@ public partial class ModpackDownloadViewModel : BaseViewModel
             _activeDownloadCts = new CancellationTokenSource();
             cts = _activeDownloadCts;
         }
+
+        VersionDisplay = entry.McVersion ?? "";
+        LoaderDisplay = !string.IsNullOrEmpty(entry.Loader) ? entry.Loader : "";
 
         DownloadProgressChanged?.Invoke(true);
         IsProgressIndeterminate = true;
@@ -441,9 +504,38 @@ public partial class ModpackDownloadViewModel : BaseViewModel
             string? javaPath = null;
             if (loaderType is "Forge" or "NeoForge")
             {
-                javaPath = GetJavaPath();
+                var settings = SettingsProvider?.Invoke();
+                javaPath = settings?.JavaPath;
+
                 if (string.IsNullOrEmpty(javaPath))
-                    throw new Exception($"{loaderType} 安装需要 Java 环境，请先在设置中配置 Java 路径。");
+                {
+                    // 按需自动检测 + 版本感知选择
+                    var autoDetected = await _javaDetection.ResolveJavaPathAsync(settings, mcVersion);
+                    if (autoDetected != null)
+                    {
+                        javaPath = autoDetected;
+                        _notificationService.Show($"已自动检测到 Java 运行环境：{autoDetected}", NotificationType.Success);
+                        if (JavaDetectedCallback != null)
+                        {
+                            var javas = await _javaDetection.DetectAsync();
+                            var detectedInfo = javas.FirstOrDefault(j => j.Path == autoDetected);
+                            if (detectedInfo != null) await JavaDetectedCallback(detectedInfo);
+                        }
+                    }
+                    else
+                    {
+                        throw new Exception(
+                            $"{loaderType} 安装需要 Java 环境。未在 PATH 或 JAVA_HOME 中检测到 Java，请安装 Java 或前往设置手动配置。");
+                    }
+                }
+
+                // Java 兼容性检查
+                if (DownloadJavaCompatibilityHandler != null)
+                {
+                    var resolved = await DownloadJavaCompatibilityHandler(javaPath, mcVersion);
+                    if (resolved == null) throw new OperationCanceledException("用户取消安装。");
+                    javaPath = resolved;
+                }
             }
 
             var loaderProgress = new Progress<DownloadProgress>(p =>
@@ -554,6 +646,16 @@ public partial class ModpackDownloadViewModel : BaseViewModel
                 {
                     _notificationService.AppendLog(
                         $"文件 {fileEntry.Path} 缺少下载地址，已跳过。",
+                        NotificationType.Warning);
+                    preCompleted++;
+                    continue;
+                }
+
+                // Verify download URL safety
+                if (!DownloadSafetyHelper.IsDownloadUrlAllowed(downloadUrl))
+                {
+                    _notificationService.AppendLog(
+                        $"文件 {fileEntry.Path} 的下载地址不在信任域名列表中，已跳过。",
                         NotificationType.Warning);
                     preCompleted++;
                     continue;
@@ -736,22 +838,6 @@ public partial class ModpackDownloadViewModel : BaseViewModel
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private string? GetJavaPath()
-    {
-        var settingsPath = Path.Combine(_gameFolder.GameDir, "settings.json");
-        if (File.Exists(settingsPath))
-        {
-            try
-            {
-                var json = File.ReadAllText(settingsPath);
-                var settings = JsonSerializer.Deserialize<LauncherSettings>(json);
-                return settings?.JavaPath;
-            }
-            catch { }
-        }
-        return null;
-    }
-
     private bool ReadIsolateNewInstancesSetting()
     {
         var settingsPath = Path.Combine(_gameFolder.GameDir, "settings.json");
@@ -861,9 +947,13 @@ public partial class ModpackDownloadViewModel : BaseViewModel
                 (p.DownloadSpeedBytesPerSecond > 0
                     ? $"  ·  {FormatByteSize((long)p.DownloadSpeedBytesPerSecond)}/s"
                     : "");
+            FileProgressValue = (double)p.CurrentFileDownloadedBytes / p.CurrentFileTotalBytes * 100.0;
+            IsFileProgressIndeterminate = false;
         }
-
-        FileProgressUpdated?.Invoke(p);
+        else
+        {
+            IsFileProgressIndeterminate = true;
+        }
     }
 
     private static string FormatByteSize(long bytes)

@@ -13,13 +13,17 @@
                         <GroupBox Header="软件信息" Padding="12"
                                   Margin="0,4">
                             <StackPanel>
-                                <TextBlock Text="EiTRVO Neo 26" FontSize="16"
+                                <TextBlock Text="EiTRVO Neo 26.1" FontSize="16"
                                            FontWeight="Bold"
                                            Foreground="{DynamicResource TextPrimary}"
-                                           Margin="0,0,0,6"/>
-                                <TextBlock Margin="0,0,0,3"
+                                           Margin="0,0,0,8"/>
+                                <TextBlock Margin="0,0,0,6"
                                            Foreground="{DynamicResource TextSecondary}">
-                                    <Run Text="EiTRVO ProEngine版本："/><Run Text="{Binding Version, Mode=OneWay}"/>
+                                    <Run Text="软件版本："/><Run Text="{Binding Version, Mode=OneWay}"/>
+                                </TextBlock>
+                                <TextBlock Margin="0,0,0,6"
+                                           Foreground="{DynamicResource TextSecondary}">
+                                    <Run Text="EiTRVO ProEngine版本："/><Run Text="{Binding ProEngineVersion, Mode=OneWay}"/>
                                 </TextBlock>
                             </StackPanel>
                         </GroupBox>
@@ -145,6 +149,13 @@
                                         <TextBlock FontSize="12"
                                                    Foreground="{DynamicResource TextPrimary}"
                                                    Margin="0,0,0,6">
+                                            <Run Text="Microsoft.Extensions.DependencyInjection.Abstractions" FontWeight="Bold"/>
+                                            <Run Text=" — Microsoft — "/>
+                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
+                                        </TextBlock>
+                                        <TextBlock FontSize="12"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Margin="0,0,0,6">
                                             <Run Text="System.Security.Cryptography.ProtectedData" FontWeight="Bold"/>
                                             <Run Text=" — Microsoft — "/>
                                             <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
@@ -157,22 +168,8 @@
                                             <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
                                         </TextBlock>
                                         <TextBlock FontSize="12"
-                                                   Foreground="{DynamicResource TextPrimary}"
-                                                   Margin="0,0,0,6">
-                                            <Run Text="Microsoft.NET.Test.Sdk" FontWeight="Bold"/>
-                                            <Run Text=" — Microsoft — "/>
-                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
-                                        </TextBlock>
-                                        <TextBlock FontSize="12"
-                                                   Foreground="{DynamicResource TextPrimary}"
-                                                   Margin="0,0,0,6">
-                                            <Run Text="MSTest.TestFramework" FontWeight="Bold"/>
-                                            <Run Text=" — Microsoft — "/>
-                                            <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
-                                        </TextBlock>
-                                        <TextBlock FontSize="12"
                                                    Foreground="{DynamicResource TextPrimary}">
-                                            <Run Text="MSTest.TestAdapter" FontWeight="Bold"/>
+                                            <Run Text="System.CodeDom" FontWeight="Bold"/>
                                             <Run Text=" — Microsoft — "/>
                                             <Run Text="MIT License" Foreground="{DynamicResource TextSecondary}"/>
                                         </TextBlock>

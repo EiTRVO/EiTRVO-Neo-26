@@ -109,6 +109,13 @@
                                    Foreground="{DynamicResource TextPrimary}"/>
                     </Button>
 
+                    <Button x:Name="sidebarProgress" Tag="progress"
+                            Style="{StaticResource SidebarNavButton}"
+                            Click="Sidebar_Click">
+                        <TextBlock Text="进度" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"/>
+                    </Button>
+
                     <Button x:Name="sidebarSettings" Tag="settings"
                             Style="{StaticResource SidebarNavButton}"
                             Click="Sidebar_Click">
@@ -173,6 +180,9 @@
             <!-- SETTINGS panel -->
             <panels:SettingsPanel x:Name="pnlSettings" Visibility="Collapsed"/>
 
+            <!-- PROGRESS panel -->
+            <panels:ProgressPanel x:Name="pnlProgress" Visibility="Collapsed"/>
+
             <!-- MANAGE panel -->
             <panels:ManagePanel x:Name="pnlManage" Visibility="Collapsed"/>
 
@@ -200,84 +210,14 @@
             <!-- MODPACK DOWNLOAD panel -->
             <panels:ModpackDownloadPanel x:Name="pnlModpackDownload" Visibility="Collapsed"/>
 
+            <!-- RESOURCE DOWNLOAD panel -->
+            <panels:ResourceDownloadPanel x:Name="pnlResourceDownload" Visibility="Collapsed"/>
+
+            <!-- INSTALLATION panel -->
+            <panels:InstallationPanel x:Name="pnlInstallation" Visibility="Collapsed"/>
+
             <!-- ACCOUNT SKIN panel -->
             <panels:AccountSkinPanel x:Name="pnlAccountSkin" Visibility="Collapsed"/>
-
-            <!-- Download Progress Card — shared overlay, shown during downloads/imports -->
-            <Border x:Name="downloadCard"
-                    Visibility="Collapsed"
-                    Margin="24,4,24,12"
-                    Padding="16,14"
-                    Background="{DynamicResource CardBg}"
-                    CornerRadius="8"
-                    BorderBrush="{DynamicResource PanelBorder}"
-                    BorderThickness="1">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="70"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="280"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <!-- Row 0: Overall progress -->
-                    <TextBlock Grid.Row="0" Grid.Column="0"
-                               Text="总体进度" FontSize="13"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextPrimary}"
-                               VerticalAlignment="Center"/>
-                    <ProgressBar Grid.Row="0" Grid.Column="1"
-                                 x:Name="downloadProgress"
-                                 Height="8"
-                                 VerticalAlignment="Center"
-                                 Margin="8,0,8,0"
-                                 Value="{Binding DownloadProgressValue}"
-                                 IsIndeterminate="{Binding IsProgressIndeterminate}"/>
-                    <TextBlock Grid.Row="0" Grid.Column="2"
-                               x:Name="lblProgressPercent"
-                               Text="{Binding ProgressText}" FontSize="12"
-                               Foreground="{DynamicResource TextSecondary}"
-                               VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis"
-                               ToolTip="{Binding ProgressText}"/>
-
-                    <!-- Row 1: Per-file progress -->
-                    <TextBlock Grid.Row="1" Grid.Column="0"
-                               Text="当前文件" FontSize="13"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource TextPrimary}"
-                               VerticalAlignment="Center"
-                               Margin="0,10,0,0"/>
-                    <ProgressBar Grid.Row="1" Grid.Column="1"
-                                 x:Name="fileProgress"
-                                 Height="8"
-                                 VerticalAlignment="Center"
-                                 Foreground="{DynamicResource AccentGreen}"
-                                 Margin="8,10,8,0"/>
-                    <TextBlock Grid.Row="1" Grid.Column="2"
-                               x:Name="lblFileProgress"
-                               Text="{Binding CurrentFileProgress}" FontSize="11"
-                               Foreground="{DynamicResource TextSecondary}"
-                               VerticalAlignment="Center"
-                               Margin="0,10,0,0"
-                               TextTrimming="CharacterEllipsis"
-                               ToolTip="{Binding CurrentFileProgress}"/>
-
-                    <!-- Row 2: Cancel button -->
-                    <Button Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
-                            Content="取消下载"
-                            Style="{StaticResource CardBtn}"
-                            Foreground="{DynamicResource AccentRed}"
-                            Height="26" FontSize="12" Padding="12,1"
-                            Margin="0,10,0,0"
-                            HorizontalAlignment="Center"
-                            Command="{Binding CancelDownloadCommand}"/>
-                </Grid>
-            </Border>
             </Grid>
         </Border>
 
@@ -314,15 +254,14 @@
         </Border>
 
                 <!-- Log list -->
-                <ItemsControl Grid.Row="1" x:Name="lstLog"
-                              ItemsSource="{Binding LogEntries}"
-                              ItemTemplate="{StaticResource LogEntryTemplate}"
-                              Margin="6,4,6,6"
-                              ScrollViewer.VerticalScrollBarVisibility="Auto"
-                              VirtualizingStackPanel.IsVirtualizing="True"
-                              VirtualizingStackPanel.ScrollUnit="Pixel"
-                              Cursor="Hand"
-                              PreviewMouseLeftButtonDown="LogEntry_Click"/>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                             Margin="6,4,6,6">
+                    <ItemsControl x:Name="lstLog"
+                                  ItemsSource="{Binding LogEntries}"
+                                  ItemTemplate="{StaticResource LogEntryTemplate}"
+                                  Cursor="Hand"
+                                  PreviewMouseLeftButtonDown="LogEntry_Click"/>
+                </ScrollViewer>
             </Grid>
         </Border>
 

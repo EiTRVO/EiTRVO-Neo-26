@@ -19,15 +19,40 @@ internal static class ForgeInstaller
     public static async Task<List<ModLoaderVersion>> GetVersionsAsync(HttpClient http, string mcVersion, CancellationToken ct = default)
     {
         string json;
-        try
+
+        // 使用 HttpRequestMessage 设置干净的 User-Agent，避免 Cloudflare WAF 拦截，
+        // 并加入重试逻辑以应对瞬时网络故障。
+        var errors = new List<string>();
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            json = await http.GetStringAsync(ForgePromoMetadata, ct);
-        }
-        catch (Exception ex)
-        {
-            throw new Exception($"无法获取 Forge 版本列表: {ex.Message}");
+            if (attempt > 0)
+            {
+                int delayMs = 1500 * attempt;
+                await Task.Delay(delayMs, ct);
+            }
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, ForgePromoMetadata);
+                request.Headers.Add("User-Agent", "EiTRVONeo");
+                var response = await http.SendAsync(request, ct);
+                response.EnsureSuccessStatusCode();
+                json = await response.Content.ReadAsStringAsync(ct);
+                goto parse;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                errors.Add(ex is HttpRequestException hre && hre.StatusCode.HasValue
+                    ? $"HTTP {(int)hre.StatusCode}: {ex.Message}"
+                    : ex.Message);
+            }
         }
 
+        throw new Exception(
+            $"无法获取 Forge 版本列表（已重试 3 次）。\n\n错误详情:\n{string.Join("\n", errors)}\n\n请检查网络连接。");
+
+    parse:
         var promo = JsonSerializer.Deserialize<ForgePromotionsResponse>(json)
                     ?? new ForgePromotionsResponse();
 

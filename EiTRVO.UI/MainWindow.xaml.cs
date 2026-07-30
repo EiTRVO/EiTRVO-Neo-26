@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Extensions.DependencyInjection;
 using EiTRVO.ProEngine.Models;
 using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Services;
@@ -55,12 +56,16 @@ namespace EiTRVO.UI
         private readonly AccountViewModel _accountVm;
         private readonly AboutViewModel _aboutVm;
         private readonly InstanceDetailViewModel _instanceDetailVm;
-        private readonly ModManagementViewModel _modManagementVm;
-        private readonly ResourcePackViewModel _resourcePackVm;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly Dictionary<string, ModManagementViewModel> _modManagementVms = new();
+        private readonly Dictionary<string, ResourcePackViewModel> _resourcePackVms = new();
         private readonly SaveLockDetailViewModel _saveLockDetailVm;
         private readonly ModpackDownloadViewModel _modpackDownloadVm;
         private readonly AccountSkinViewModel _accountSkinVm;
         private readonly SchematicManagementViewModel _schematicManagementVm;
+        private readonly ProgressViewModel _progressVm;
+        private readonly InstallationViewModel _installationVm;
+        private readonly ResourceDownloadViewModel _resourceDownloadVm;
 
         // ==================== UI 状态 ====================
         public ObservableCollection<NotificationItem> Notifications => _notificationService.Notifications;
@@ -110,12 +115,14 @@ namespace EiTRVO.UI
             AccountViewModel accountVm,
             AboutViewModel aboutVm,
             InstanceDetailViewModel instanceDetailVm,
-            ModManagementViewModel modManagementVm,
-            ResourcePackViewModel resourcePackVm,
+            IServiceProvider serviceProvider,
             SaveLockDetailViewModel saveLockDetailVm,
             ModpackDownloadViewModel modpackDownloadVm,
             AccountSkinViewModel accountSkinVm,
-            SchematicManagementViewModel schematicManagementVm)
+            SchematicManagementViewModel schematicManagementVm,
+            ProgressViewModel progressVm,
+            InstallationViewModel installationVm,
+            ResourceDownloadViewModel resourceDownloadVm)
         {
             InitializeComponent();
 
@@ -146,15 +153,17 @@ namespace EiTRVO.UI
             _accountVm = accountVm;
             _aboutVm = aboutVm;
             _instanceDetailVm = instanceDetailVm;
-            _modManagementVm = modManagementVm;
-            _resourcePackVm = resourcePackVm;
+            _serviceProvider = serviceProvider;
             _saveLockDetailVm = saveLockDetailVm;
             _modpackDownloadVm = modpackDownloadVm;
             _accountSkinVm = accountSkinVm;
             _schematicManagementVm = schematicManagementVm;
+            _progressVm = progressVm;
+            _installationVm = installationVm;
+            _resourceDownloadVm = resourceDownloadVm;
 
             _themeService.SetTheme(false);
-            WpfThemeHelper.ApplyColorScheme(Resources, _themeService.GetColorScheme());
+            WpfThemeHelper.ApplyColorScheme(Application.Current.Resources, _themeService.GetColorScheme());
             _themeService.ThemeChanged += OnThemeChanged;
             DataContext = this;
             _gameFolder = gameFolder;
@@ -176,21 +185,47 @@ namespace EiTRVO.UI
             pnlSettings.DataContext = _settingsVm;
             pnlManage.DataContext = _manageVm;
             pnlInstanceDetail.DataContext = _instanceDetailVm;
-            pnlModManagement.DataContext = _modManagementVm;
-            pnlResourcePacks.DataContext = _resourcePackVm;
+            // pnlModManagement and pnlResourcePacks DataContexts are set
+            // dynamically in navigation handlers (per-instance VM isolation)
             pnlAccount.DataContext = _accountVm;
             pnlAbout.DataContext = _aboutVm;
             pnlSaveLockDetail.DataContext = _saveLockDetailVm;
             pnlModpackDownload.DataContext = _modpackDownloadVm;
             pnlAccountSkin.DataContext = _accountSkinVm;
             pnlSchematicManagement.DataContext = _schematicManagementVm;
+            pnlProgress.DataContext = _progressVm;
+            pnlInstallation.DataContext = _installationVm;
+            pnlResourceDownload.DataContext = _resourceDownloadVm;
 
             // Wire ViewModel events
             _homeVm.LaunchFailed += (msg, logPath) => _dispatcher.Invoke(() => ShowFailureDialog(msg, logPath));
 
+            // 启动开始时：清空旧日志 + 跳转进度页 + 启动进度条
+            _homeVm.LaunchStarted += (instanceName) => _dispatcher.Invoke(() =>
+            {
+                _progressVm.ClearOnNewLaunch(instanceName);
+                _progressVm.SelectedTab = "launch";
+                _progressVm.StartLaunchProgress();
+                SwitchToPanel("progress");
+            });
+
             // EiTRVO Firewall: 注入开关状态
             _launchOrchestrator.FirewallEnabledProvider = () => _settings.FirewallEnabled;
             _launchOrchestrator.AdvancedDefenseEnabledProvider = () => _settings.AdvancedDefenseEnabled;
+
+            // 运行日志：将游戏进程输出桥接到进度页 ViewModel
+            _launchOrchestrator.GameOutputReceived += (line, isStderr) =>
+                _progressVm.AppendRuntimeLog(line, isStderr);
+
+            _launchOrchestrator.GameRunningChanged += (isRunning) =>
+            {
+                _dispatcher.Invoke(() =>
+                {
+                    _progressVm.OnGameRunningChanged(isRunning);
+                    if (isRunning)
+                        _progressVm.CompleteLaunchProgress();
+                });
+            };
 
             // Mods 完整性校验：注入未收录 Mod 警告回调
             _launchOrchestrator.ModsWarningHandler = (unknownFiles) =>
@@ -239,7 +274,8 @@ namespace EiTRVO.UI
                         var message = "检测到您未登录正版Minecraft账号。\n\n" +
                                       "如果您喜欢这款游戏，请前往Minecraft官网购买正版账号，\n" +
                                       "支持游戏开发者，享受完整的在线服务！\n\n" +
-                                      "点击「是」前往Minecraft官网。";
+                                      "点击「是」前往Minecraft官网。\n" +
+                                      "若按【否】则正常启动游戏。";
 
                         bool buy = MessageBox.Show(message, "EiTRVO 正版提醒",
                             MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes;
@@ -288,7 +324,7 @@ namespace EiTRVO.UI
             _backupService.IsGameRunning = () => _launchOrchestrator.IsGameRunning;
 
             // 备份/恢复：ViewModel 事件 → MainWindow
-            _settingsVm.ManualBackupRequested += async () => await RunBackupAsync(isScheduled: false);
+            _settingsVm.ManualBackupRequested += async (folder) => await RunBackupAsync(folder, isScheduled: false);
             _settingsVm.RestoreRequested += async (filePath, mode) => await RunRestoreAsync(filePath, mode);
 
             _settingsVm.PropertyChanged += (s, e) =>
@@ -345,61 +381,68 @@ namespace EiTRVO.UI
                         _settings.DisableChunkedDownload = _settingsVm.DisableChunkedDownload;
                         SaveSettingsFromVm();
                         break;
+                    case nameof(SettingsViewModel.DebugMode):
+                        _settings.DebugMode = _settingsVm.DebugMode;
+                        _homeVm.DebugMode = _settingsVm.DebugMode;
+                        SaveSettingsFromVm();
+                        break;
                 }
             };
             _manageVm.DownloadProgressChanged += show => _dispatcher.Invoke(() =>
             {
-                if (show) downloadCard.DataContext = _manageVm;
-                downloadCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-                if (!show) fileProgress.Visibility = Visibility.Collapsed;
-            });
-            _manageVm.FileProgressUpdated += p => _dispatcher.Invoke(() =>
-            {
-                fileProgress.Visibility = Visibility.Visible;
-                if (p.CurrentFileTotalBytes > 0)
+                _progressVm.ActiveDownloadVm = show ? _manageVm : null;
+                if (show)
                 {
-                    fileProgress.IsIndeterminate = false;
-                    fileProgress.Value = (double)p.CurrentFileDownloadedBytes / p.CurrentFileTotalBytes * 100.0;
+                    _progressVm.VersionDisplay = _manageVm.VersionDisplay;
+                    _progressVm.LoaderDisplay = _manageVm.LoaderDisplay;
+                    _progressVm.SelectedTab = "download";
+                    SwitchToPanel("progress");
                 }
-                else { fileProgress.IsIndeterminate = true; }
             });
             _manageVm.SettingsProvider = () => _settings;
-            _downloadVm.DownloadProgressOverlayChanged += show => _dispatcher.Invoke(() =>
+
+            // Download → Installation/Mopack navigation
+            _downloadVm.NavigateToInstallation += entry =>
             {
-                if (show) downloadCard.DataContext = _downloadVm;
-                downloadCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-                if (!show) { fileProgress.Visibility = Visibility.Collapsed; }
-            });
-            _downloadVm.FileProgressUpdated += p => _dispatcher.Invoke(() =>
-            {
-                fileProgress.Visibility = Visibility.Visible;
-                if (p.CurrentFileTotalBytes > 0)
-                {
-                    fileProgress.IsIndeterminate = false;
-                    fileProgress.Value = (double)p.CurrentFileDownloadedBytes / p.CurrentFileTotalBytes * 100.0;
-                }
-                else { fileProgress.IsIndeterminate = true; }
-            });
-            _downloadVm.SettingsProvider = () => _settings;
+                _installationVm.Initialize(entry);
+                SwitchToPanel("installation");
+            };
             _downloadVm.NavigateToModpackDownload += () => SwitchToPanel("modpack-download");
+            _downloadVm.NavigateToResourceDownload += async () =>
+            {
+                await _resourceDownloadVm.InitializeAsync();
+                SwitchToPanel("resource-download");
+            };
+
+            // Installation progress → navigate to Progress page
+            _installationVm.DownloadProgressChanged += show => _dispatcher.Invoke(() =>
+            {
+                _progressVm.ActiveDownloadVm = show ? _installationVm : null;
+                if (show)
+                {
+                    _progressVm.VersionDisplay = _installationVm.VersionDisplay;
+                    _progressVm.LoaderDisplay = _installationVm.LoaderDisplay;
+                    _progressVm.SelectedTab = "download";
+                    SwitchToPanel("progress");
+                }
+            });
+            _installationVm.SettingsProvider = () => _settings;
+            _modpackDownloadVm.SettingsProvider = () => _settings;
+            _installationVm.BackRequested += () => SwitchToPanel("download");
 
             // Modpack download navigation
             _modpackDownloadVm.BackRequested += () => SwitchToPanel("download");
+            _resourceDownloadVm.BackRequested += () => SwitchToPanel("download");
             _modpackDownloadVm.DownloadProgressChanged += show => _dispatcher.Invoke(() =>
             {
-                if (show) downloadCard.DataContext = _modpackDownloadVm;
-                downloadCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-                if (!show) fileProgress.Visibility = Visibility.Collapsed;
-            });
-            _modpackDownloadVm.FileProgressUpdated += p => _dispatcher.Invoke(() =>
-            {
-                fileProgress.Visibility = Visibility.Visible;
-                if (p.CurrentFileTotalBytes > 0)
+                _progressVm.ActiveDownloadVm = show ? _modpackDownloadVm : null;
+                if (show)
                 {
-                    fileProgress.IsIndeterminate = false;
-                    fileProgress.Value = (double)p.CurrentFileDownloadedBytes / p.CurrentFileTotalBytes * 100.0;
+                    _progressVm.VersionDisplay = _modpackDownloadVm.VersionDisplay;
+                    _progressVm.LoaderDisplay = _modpackDownloadVm.LoaderDisplay;
+                    _progressVm.SelectedTab = "download";
+                    SwitchToPanel("progress");
                 }
-                else { fileProgress.IsIndeterminate = true; }
             });
 
             // Instance detail navigation
@@ -410,21 +453,25 @@ namespace EiTRVO.UI
             };
             _instanceDetailVm.BackRequested += () => SwitchToPanel("manage");
 
-            // Mod management navigation
+            // Mod management navigation (per-instance VM via dictionary + IServiceProvider)
             _instanceDetailVm.NavigateToModManagement += (name, modsFolder, versionId, loaderType) =>
             {
-                _modManagementVm.LoadMods(name, modsFolder, versionId, loaderType);
+                var vm = GetOrCreateModManagementVm(name);
+                // Only reload if switching to a different instance or first load
+                if (vm.InstanceName != name || vm.Mods.Count == 0)
+                    vm.LoadMods(name, modsFolder, versionId, loaderType);
+                pnlModManagement.DataContext = vm;
                 SwitchToPanel("mod-management");
             };
-            _modManagementVm.BackRequested += () => SwitchToPanel("instance-detail");
 
-            // Resource & shader pack management navigation
+            // Resource & shader pack management navigation (per-instance VM)
             _instanceDetailVm.NavigateToResourcePacks += (name, rpFolder, spFolder, versionId) =>
             {
-                _resourcePackVm.LoadPacks(name, rpFolder, spFolder, versionId);
+                var vm = GetOrCreateResourcePackVm(name);
+                vm.LoadPacks(name, rpFolder, spFolder, versionId);
+                pnlResourcePacks.DataContext = vm;
                 SwitchToPanel("resource-packs");
             };
-            _resourcePackVm.BackRequested += () => SwitchToPanel("instance-detail");
 
             // Save lock detail navigation
             _instanceDetailVm.NavigateToSaveLockDetail += (instanceName, saveName, savePath, isLocked) =>
@@ -464,10 +511,14 @@ namespace EiTRVO.UI
             _panelCategories["schematic-management"] = "manage";
             _panelCategories["account"] = "account";
             _panelCategories["account-skin"] = "account";
+            _panelCategories["modpack-download"] = "download";
+            _panelCategories["resource-download"] = "download";
+            _panelCategories["installation"] = "download";
 
             // Sidebar button map
             _sidebarButtons["home"] = sidebarHome;
             _sidebarButtons["download"] = sidebarDownload;
+            _sidebarButtons["progress"] = sidebarProgress;
             _sidebarButtons["settings"] = sidebarSettings;
             _sidebarButtons["manage"] = sidebarManage;
             _sidebarButtons["account"] = sidebarAccount;
@@ -507,6 +558,19 @@ namespace EiTRVO.UI
             LoadAccounts();
             ScanVersions();
             _settings = SettingsService.Load(_gameDir);
+
+            // === 首次启动向导（独立 wizard.json，不受 settings.json 覆写影响） ===
+            if (!WizardCompletionHelper.IsCompleted(_gameDir))
+            {
+                bool completed = await ShowWizardAsync();
+                if (completed)
+                {
+                    // Reload settings — wizard may have modified them
+                    _settings = SettingsService.Load(_gameDir);
+                    LoadAccounts();
+                }
+            }
+
             ApplySettings();
 
             // 清理上次异常中断的备份/恢复残留
@@ -522,11 +586,156 @@ namespace EiTRVO.UI
                 RestoreJavaSelection();
             }
             _homeVm.SelectedJava = _settingsVm.SelectedJava;
-            _homeVm.Memory = _settings.MemoryMB > 0 ? _settings.MemoryMB : 2048;
+            _homeVm.Memory = _settings.MemoryMB > 0 ? _settings.MemoryMB : EiTRVO.ProEngine.Helpers.SystemMemoryInfo.RecommendedDefaultMemoryMB;
             _homeVm.SelectedResolution = _settings.Resolution;
+            _homeVm.DebugMode = _settings.DebugMode;
             await _downloadVm.InitializeVersionListAsync();
             await _modpackDownloadVm.InitializeAsync();
+            await _resourceDownloadVm.InitializeAsync();
+            await _homeVm.LoadLastLaunchAsync();
             await _settingsVm.CheckWindowsHelloAvailabilityAsync();
+
+            // === Java 兼容性检查回调 ===
+            _homeVm.JavaCompatibilityHandler = async (JavaInfo currentJava, GameInstance instance) =>
+            {
+                int required = PlatformHelper.GetMinecraftRequiredJavaVersion(instance.BaseVersion);
+                string msg = $"当前选择的 Java {currentJava.ShortVersion}（主版本 {currentJava.MajorVersion}）" +
+                             $"无法启动 Minecraft {instance.VersionId}（需要 Java {required} 或更高版本）。\n\n" +
+                             "是否由启动器自动选择合适的 Java 版本？\n\n" +
+                             "选「否」将取消本次启动，您可前往设置页面自行选择。";
+
+                bool autoSelect = false;
+                _dispatcher.Invoke(() =>
+                {
+                    autoSelect = MessageBox.Show(msg, "EiTRVO — Java 版本不兼容",
+                        MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+                });
+
+                if (!autoSelect)
+                {
+                    _notificationService.Show("请前往设置页面选择兼容的 Java 版本。", NotificationType.Warning);
+                    return null;
+                }
+
+                // 从设置页检测到的 Java 列表中自动选择
+                var javaList = _settingsVm.JavaList.ToList();
+                if (javaList.Count == 0)
+                {
+                    _notificationService.Show("未检测到任何 Java 运行环境，请手动指定。", NotificationType.Error);
+                    return null;
+                }
+
+                foreach (var candidate in javaList)
+                {
+                    if (candidate.MajorVersion < required) continue;
+
+                    // 二次验证：运行 java -version 确认有效性和安全性
+                    var verify = await JavaDetectionService.GetJavaVersionInfoAsync(candidate.Path);
+                    if (verify == null) continue;
+
+                    // 使用验证后的版本信息
+                    candidate.Version = verify.Value.full;
+                    candidate.ShortVersion = verify.Value.shortVer;
+                    candidate.MajorVersion = verify.Value.major;
+
+                    _homeVm.SelectedJava = candidate;
+                    _settingsVm.SelectedJava = candidate;
+                    _notificationService.Show(
+                        $"已自动切换为 Java {candidate.ShortVersion}",
+                        NotificationType.Success);
+                    return candidate;
+                }
+
+                _notificationService.Show(
+                    $"未找到兼容 Java {required}+ 的版本，请前往设置手动选择。", NotificationType.Error);
+                return null;
+            };
+
+            // === 下载流程 Java 兼容性检查回调（共享给 Download/Manage/ModpackDownload） ===
+            Func<string, string, Task<string?>> downloadJavaHandler = async (javaPath, mcVersion) =>
+            {
+                if (_homeVm.DebugMode) return javaPath;
+
+                int required = PlatformHelper.GetMinecraftRequiredJavaVersion(mcVersion);
+
+                // 获取当前 Java 的大版本号
+                var currentInfo = await JavaDetectionService.GetJavaVersionInfoAsync(javaPath);
+                if (currentInfo == null)
+                {
+                    // Java 路径无效（文件不存在或无法执行）
+                    _notificationService.Show($"Java 运行时无效：{javaPath}", NotificationType.Error);
+                    return null;
+                }
+
+                if (currentInfo.Value.major >= required)
+                    return javaPath; // 兼容，原样返回
+
+                // 不兼容 → 弹窗
+                string msg = $"当前 Java {currentInfo.Value.shortVer}（主版本 {currentInfo.Value.major}）" +
+                             $"无法安装 Minecraft {mcVersion}（需要 Java {required} 或更高版本）。\n\n" +
+                             "是否由启动器自动选择合适的 Java 版本？\n\n" +
+                             "选「否」将取消本次安装。";
+
+                bool autoSelect = false;
+                _dispatcher.Invoke(() =>
+                {
+                    autoSelect = MessageBox.Show(msg, "EiTRVO — Java 版本不兼容",
+                        MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+                });
+
+                if (!autoSelect)
+                {
+                    _notificationService.Show("已取消安装，请前往设置页面选择兼容的 Java 版本。", NotificationType.Warning);
+                    return null;
+                }
+
+                // 自动选择
+                var javaList = _settingsVm.JavaList.ToList();
+                if (javaList.Count == 0)
+                {
+                    _notificationService.Show("未检测到任何 Java 运行环境，请手动指定。", NotificationType.Error);
+                    return null;
+                }
+
+                foreach (var candidate in javaList)
+                {
+                    if (candidate.MajorVersion < required) continue;
+
+                    var verify = await JavaDetectionService.GetJavaVersionInfoAsync(candidate.Path);
+                    if (verify == null) continue;
+
+                    candidate.Version = verify.Value.full;
+                    candidate.ShortVersion = verify.Value.shortVer;
+                    candidate.MajorVersion = verify.Value.major;
+
+                    _settingsVm.SelectedJava = candidate;
+                    _notificationService.Show(
+                        $"已自动切换为 Java {candidate.ShortVersion}",
+                        NotificationType.Success);
+                    return candidate.Path;
+                }
+
+                _notificationService.Show(
+                    $"未找到兼容 Java {required}+ 的版本，请前往设置手动选择。", NotificationType.Error);
+                return null;
+            };
+
+            _installationVm.DownloadJavaCompatibilityHandler = downloadJavaHandler;
+            _manageVm.DownloadJavaCompatibilityHandler = downloadJavaHandler;
+            _modpackDownloadVm.DownloadJavaCompatibilityHandler = downloadJavaHandler;
+
+            // === Java 自动检测回调：将自动检测到的 Java 保存到设置 ===
+            Func<JavaInfo, Task> javaDetectedHandler = async (java) =>
+            {
+                _settingsVm.SelectedJava = java;
+                _homeVm.SelectedJava = java;
+                // SelectedJava 的 PropertyChanged 会触发 SaveSettingsFromVm()
+            };
+
+            _installationVm.JavaDetectedCallback = javaDetectedHandler;
+            _manageVm.JavaDetectedCallback = javaDetectedHandler;
+            _modpackDownloadVm.JavaDetectedCallback = javaDetectedHandler;
+
             _settingsReady = true;
 
             // === 自动备份调度检查 ===
@@ -591,6 +800,40 @@ namespace EiTRVO.UI
                 SwitchToPanel(key);
         }
 
+        // === Per-instance ViewModel factory methods ===
+
+        /// <summary>
+        /// Get or create a <see cref="ModManagementViewModel"/> for the given instance.
+        /// Each instance gets its own VM, preserving downloads, search state, and tab
+        /// selection when navigating between instances.
+        /// </summary>
+        private ModManagementViewModel GetOrCreateModManagementVm(string instanceName)
+        {
+            if (!_modManagementVms.TryGetValue(instanceName, out var vm))
+            {
+                vm = _serviceProvider.GetRequiredService<ModManagementViewModel>();
+                vm.BackRequested += () => SwitchToPanel("instance-detail");
+                _modManagementVms[instanceName] = vm;
+            }
+            return vm;
+        }
+
+        /// <summary>
+        /// Get or create a <see cref="ResourcePackViewModel"/> for the given instance.
+        /// Each instance gets its own VM, preserving downloads, search state, and tab
+        /// selection when navigating between instances.
+        /// </summary>
+        private ResourcePackViewModel GetOrCreateResourcePackVm(string instanceName)
+        {
+            if (!_resourcePackVms.TryGetValue(instanceName, out var vm))
+            {
+                vm = _serviceProvider.GetRequiredService<ResourcePackViewModel>();
+                vm.BackRequested += () => SwitchToPanel("instance-detail");
+                _resourcePackVms[instanceName] = vm;
+            }
+            return vm;
+        }
+
         private async void SwitchToPanel(string key)
         {
             var category = _panelCategories.GetValueOrDefault(key);
@@ -619,6 +862,7 @@ namespace EiTRVO.UI
             pnlHome.Visibility = key == "home" ? Visibility.Visible : Visibility.Collapsed;
             pnlDownload.Visibility = key == "download" ? Visibility.Visible : Visibility.Collapsed;
             pnlSettings.Visibility = key == "settings" ? Visibility.Visible : Visibility.Collapsed;
+            pnlProgress.Visibility = key == "progress" ? Visibility.Visible : Visibility.Collapsed;
             pnlManage.Visibility = key == "manage" ? Visibility.Visible : Visibility.Collapsed;
             pnlInstanceDetail.Visibility = key == "instance-detail" ? Visibility.Visible : Visibility.Collapsed;
             pnlModManagement.Visibility = key == "mod-management" ? Visibility.Visible : Visibility.Collapsed;
@@ -629,8 +873,10 @@ namespace EiTRVO.UI
             pnlModpackDownload.Visibility = key == "modpack-download" ? Visibility.Visible : Visibility.Collapsed;
             pnlAccountSkin.Visibility = key == "account-skin" ? Visibility.Visible : Visibility.Collapsed;
             pnlSchematicManagement.Visibility = key == "schematic-management" ? Visibility.Visible : Visibility.Collapsed;
+            pnlInstallation.Visibility = key == "installation" ? Visibility.Visible : Visibility.Collapsed;
+            pnlResourceDownload.Visibility = key == "resource-download" ? Visibility.Visible : Visibility.Collapsed;
             HighlightSidebarItem(key is "instance-detail" or "mod-management" or "resource-packs" or "save-lock-detail" or "schematic-management" ? "manage"
-                : key is "modpack-download" ? "download"
+                : key is "modpack-download" or "installation" or "resource-download" ? "download"
                 : key is "account-skin" ? "account"
                 : key);
         }
@@ -650,14 +896,14 @@ namespace EiTRVO.UI
         private void ApplyTheme(bool isDark)
         {
             _themeService.SetTheme(isDark);
-            WpfThemeHelper.ApplyColorScheme(Resources, _themeService.GetColorScheme());
+            WpfThemeHelper.ApplyColorScheme(Application.Current.Resources, _themeService.GetColorScheme());
             HighlightSidebarItem(_activePanel);
             btnThemeToggle.Content = isDark ? "浅色模式" : "深色模式";
         }
 
         private void OnThemeChanged(bool isDark)
         {
-            WpfThemeHelper.ApplyColorScheme(Resources, _themeService.GetColorScheme());
+            WpfThemeHelper.ApplyColorScheme(Application.Current.Resources, _themeService.GetColorScheme());
             HighlightSidebarItem(_activePanel);
             btnThemeToggle.Content = isDark ? "浅色模式" : "深色模式";
         }
@@ -691,7 +937,7 @@ namespace EiTRVO.UI
         {
             _settingsVm.ApplySettings(_settings);
             _settingsVm.IsolateNewInstancesByDefault = _settings.IsolateNewInstancesByDefault;
-            _homeVm.Memory = _settings.MemoryMB > 0 ? _settings.MemoryMB : 2048;
+            _homeVm.Memory = _settings.MemoryMB > 0 ? _settings.MemoryMB : EiTRVO.ProEngine.Helpers.SystemMemoryInfo.RecommendedDefaultMemoryMB;
             _homeVm.SelectedResolution = _settings.Resolution;
             _settingsVm.SelectedResolution = _settings.Resolution;
             _settingsVm.LastBackupTime = _settings.LastBackupTime;
@@ -773,9 +1019,10 @@ namespace EiTRVO.UI
 
         // ==================== 备份 / 恢复 ====================
 
-        private async Task RunBackupAsync(bool isScheduled = true)
+        /// <param name="manualFolder">手动备份时用户选择的文件夹（仅 isScheduled=false 时使用）。</param>
+        private async Task RunBackupAsync(string? manualFolder = null, bool isScheduled = true)
         {
-            var folder = _settings.BackupFolder;
+            var folder = manualFolder ?? _settings.BackupFolder;
             if (string.IsNullOrEmpty(folder)) return;
 
             _isBackupRunning = true;
@@ -946,7 +1193,45 @@ namespace EiTRVO.UI
             return result;
         }
 
-        // ==================== Java 妫€娴?====================
+        // ==================== 首次启动向导 ====================
+        private async Task<bool> ShowWizardAsync()
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            _dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    var wizardVm = ((IServiceProvider)App.Services)
+                        .GetService(typeof(ViewModels.WizardViewModel)) as ViewModels.WizardViewModel;
+                    if (wizardVm == null)
+                    {
+                        tcs.TrySetResult(false);
+                        return;
+                    }
+
+                    var wizard = new WizardWindow(wizardVm);
+                    wizard.Owner = this;
+
+                    // Apply current theme to the wizard window
+                    Platforms.WpfThemeHelper.ApplyColorScheme(
+                        Application.Current.Resources,
+                        _themeService.GetColorScheme());
+
+                    bool? result = wizard.ShowDialog();
+                    tcs.TrySetResult(result == true);
+                }
+                catch (Exception ex)
+                {
+                    _notificationService.WriteDiagnosticLog("向导启动失败", ex.ToString());
+                    tcs.TrySetResult(false);
+                }
+            });
+
+            return await tcs.Task;
+        }
+
+        // ==================== Java 检测 ====================
         private async Task DetectJavaAsync()
         {
             await _settingsVm.DetectJavaCommand.ExecuteAsync(null);

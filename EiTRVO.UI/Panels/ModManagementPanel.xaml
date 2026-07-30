@@ -109,20 +109,21 @@
                                        Margin="0,0,0,8"
                                        Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
+                            <!-- SHA1 元数据解析中 -->
+                            <TextBlock Grid.Row="1"
+                                       Text="正在识别模组信息..."
+                                       FontSize="13"
+                                       Foreground="{DynamicResource AccentBlue}"
+                                       Margin="0,0,0,8"
+                                       Visibility="{Binding IsResolvingModrinthMetadata, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
                             <!-- Mod list -->
                             <ListBox Grid.Row="2" x:Name="lstMods"
                                      SelectionMode="Single"
                                      ItemsSource="{Binding Mods}"
                                      ItemTemplate="{StaticResource ModCardTemplate}"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ListBox.ItemContainerStyle>
-                                    <Style TargetType="ListBoxItem">
-                                        <Setter Property="HorizontalContentAlignment"
-                                                Value="Stretch"/>
-                                        <Setter Property="Padding" Value="0"/>
-                                    </Style>
-                                </ListBox.ItemContainerStyle>
-                            </ListBox>
+                                     ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
                         </Grid>
 
                         <!-- 模组下载 -->
@@ -195,16 +196,9 @@
                                      SelectionMode="Single"
                                      ItemsSource="{Binding SearchResults}"
                                      ItemTemplate="{StaticResource ModDownloadCardTemplate}"
+                                     ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                     Visibility="{Binding HasNoResults, Converter={StaticResource BoolInvertConverter}}">
-                                <ListBox.ItemContainerStyle>
-                                    <Style TargetType="ListBoxItem">
-                                        <Setter Property="HorizontalContentAlignment"
-                                                Value="Stretch"/>
-                                        <Setter Property="Padding" Value="0"/>
-                                    </Style>
-                                </ListBox.ItemContainerStyle>
-                            </ListBox>
+                                     Visibility="{Binding HasNoResults, Converter={StaticResource BoolInvertConverter}}"/>
 
                             <!-- Modrinth attribution -->
                             <TextBlock Grid.Row="3"

@@ -344,13 +344,11 @@ public class SaveLockService
             progress?.Report((fileIndex, fileIndex));
         }
 
-        // Verify SHA-256 trailer
+        // Verify SHA-256 trailer (streamed — avoids allocating entire file)
         byte[] storedTrailer = new byte[TrailerSize];
         fs.ReadExactly(storedTrailer);
         fs.Position = 0;
-        byte[] trailerData = new byte[fs.Length - TrailerSize];
-        await fs.ReadExactlyAsync(trailerData, 0, trailerData.Length, ct);
-        byte[] computedTrailer = SHA256.HashData(trailerData);
+        byte[] computedTrailer = await ComputeTrailerFromStreamAsync(fs, fs.Length - TrailerSize, ct);
         if (!storedTrailer.AsSpan().SequenceEqual(computedTrailer))
             throw new InvalidDataException("存档文件完整性校验失败——文件可能已被损坏或篡改。");
 
@@ -456,13 +454,11 @@ public class SaveLockService
             progress?.Report((fileIndex, fileIndex)); // 预读无法知道总数，用当前数报告
         }
 
-        // Verify SHA-256 trailer
+        // Verify SHA-256 trailer (streamed — avoids allocating entire file)
         byte[] storedTrailer2 = new byte[TrailerSize];
         fs.ReadExactly(storedTrailer2);
         fs.Position = 0;
-        byte[] trailerData2 = new byte[fs.Length - TrailerSize];
-        await fs.ReadExactlyAsync(trailerData2, 0, trailerData2.Length, ct);
-        byte[] computedTrailer2 = SHA256.HashData(trailerData2);
+        byte[] computedTrailer2 = await ComputeTrailerFromStreamAsync(fs, fs.Length - TrailerSize, ct);
         if (!storedTrailer2.AsSpan().SequenceEqual(computedTrailer2))
             throw new InvalidDataException("存档文件完整性校验失败——文件可能已被损坏或篡改。");
 
@@ -732,6 +728,23 @@ public class SaveLockService
     {
         await using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         return await SHA256.HashDataAsync(fs);
+    }
+
+    /// <summary>对已打开的流的前 <paramref name="length"/> 字节进行分块 SHA-256 哈希计算，避免一次性全量分配内存。</summary>
+    private static async Task<byte[]> ComputeTrailerFromStreamAsync(Stream stream, long length, CancellationToken ct)
+    {
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        byte[] buffer = new byte[65536];
+        long remaining = length;
+        while (remaining > 0)
+        {
+            int toRead = (int)Math.Min(buffer.Length, remaining);
+            int read = await stream.ReadAsync(buffer, 0, toRead, ct);
+            if (read == 0) break;
+            hasher.AppendData(buffer, 0, read);
+            remaining -= read;
+        }
+        return hasher.GetHashAndReset();
     }
 
     /// <summary>Metadata JSON 反序列化用的内部类</summary>

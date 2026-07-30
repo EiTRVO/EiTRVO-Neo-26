@@ -96,10 +96,10 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Name}" FontSize="13"
+                    <TextBlock Text="{Binding DisplayTitle}" FontSize="13"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource TextPrimary}"/>
-                    <TextBlock Text="{Binding FullPath}" FontSize="11"
+                    <TextBlock Text="{Binding DisplaySubtitle}" FontSize="11"
                                Foreground="{DynamicResource TextMuted}"
                                Margin="0,2,0,0"
                                TextTrimming="CharacterEllipsis"/>
@@ -856,18 +856,19 @@
                                        FontWeight="SemiBold"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock FontSize="11"
+                    <TextBlock FontSize="10"
                                Foreground="{DynamicResource TextSecondary}"
-                               Margin="0,2,0,0">
+                               FontFamily="{DynamicResource CustomFont}"
+                               Margin="0,4,0,0">
                         <Run Text="UUID: "/>
-                        <Run Text="{Binding MaskedUUID, Mode=OneWay}" Foreground="{DynamicResource TextMuted}"
-                             FontFamily="Consolas"/>
+                        <Run Text="{Binding MaskedUUID, Mode=OneWay}" Foreground="{DynamicResource TextMuted}"/>
                     </TextBlock>
                     <TextBlock FontSize="10"
-                               Foreground="{DynamicResource TextMuted}"
-                               Margin="0,1,0,0">
+                               Foreground="{DynamicResource TextSecondary}"
+                               FontFamily="{DynamicResource CustomFont}"
+                               Margin="0,2,0,0">
                         <Run Text="上次使用："/>
-                        <Run Text="{Binding LastUsedDisplay, Mode=OneWay}"/>
+                        <Run Text="{Binding LastUsedDisplay, Mode=OneWay}" Foreground="{DynamicResource TextMuted}"/>
                     </TextBlock>
                 </StackPanel>
 
@@ -933,19 +934,54 @@
                     <Button Grid.Column="1" Content="下载"
                             Style="{StaticResource PrimaryBtn}"
                             Height="28" FontSize="12" Padding="14,2"
-                            Command="{Binding DataContext.DownloadCommand, ElementName=lstVersions}"
+                            Command="{Binding DataContext.GoToInstallationCommand, ElementName=lstVersions}"
                             CommandParameter="{Binding Id}"/>
                 </Grid>
             </Grid>
         </Border>
 
         <DataTemplate.Triggers>
-            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
-                <Setter TargetName="cardRoot" Property="Background" Value="{DynamicResource CardSelectedBg}"/>
-                <Setter TargetName="cardRoot" Property="BorderBrush" Value="{DynamicResource AccentBlue}"/>
-            </DataTrigger>
             <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
                 <Setter TargetName="cardRoot" Property="Background" Value="{DynamicResource CardHoverBg}"/>
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <!-- Loader Card (for InstallationPanel loader selection) -->
+    <DataTemplate x:Key="LoaderCardTemplate">
+        <Border x:Name="cardRoot" Padding="12,6" CornerRadius="4" Margin="3"
+                Background="{DynamicResource CardBg}"
+                BorderBrush="{DynamicResource SidebarBorder}"
+                BorderThickness="1"
+                Cursor="Hand"
+                ToolTip="{Binding Name}">
+            <TextBlock Text="{Binding Name}" FontSize="13"
+                       Foreground="{DynamicResource TextPrimary}"
+                       VerticalAlignment="Center"/>
+        </Border>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                <Setter TargetName="cardRoot" Property="Background" Value="{DynamicResource AccentGreen}"/>
+                <Setter TargetName="cardRoot" Property="BorderBrush" Value="{DynamicResource AccentGreen}"/>
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <!-- Loader Version Card (for InstallationPanel version selection) -->
+    <DataTemplate x:Key="LoaderVersionCardTemplate">
+        <Border x:Name="cardRoot" Padding="12,6" CornerRadius="4" Margin="0,1"
+                Background="{DynamicResource CardBg}"
+                BorderBrush="{DynamicResource PanelBorder}"
+                BorderThickness="1"
+                Cursor="Hand">
+            <TextBlock Text="{Binding DisplayText}" FontSize="12"
+                       Foreground="{DynamicResource TextPrimary}"
+                       VerticalAlignment="Center"/>
+        </Border>
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                <Setter TargetName="cardRoot" Property="Background" Value="{DynamicResource AccentGreen}"/>
+                <Setter TargetName="cardRoot" Property="BorderBrush" Value="{DynamicResource AccentGreen}"/>
             </DataTrigger>
         </DataTemplate.Triggers>
     </DataTemplate>
@@ -979,6 +1015,117 @@
                         CommandParameter="{Binding}"/>
             </Grid>
         </Border>
+    </DataTemplate>
+
+    <!-- ========================================== -->
+    <!-- Home page card templates (no action buttons) -->
+    <!-- ========================================== -->
+
+    <!-- Home Account Card (button-free, with selection highlight) -->
+    <DataTemplate x:Key="HomeAccountCardTemplate">
+        <Border x:Name="cardRoot" Margin="4,2" Padding="14,10" CornerRadius="6"
+                Background="{DynamicResource CardBg}"
+                BorderBrush="{DynamicResource PanelBorder}"
+                BorderThickness="1" Cursor="Hand">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- 卡片内容（左侧） -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <TextBlock Text="{Binding DisplayText}" FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"/>
+                        <Border Background="{DynamicResource AccentBlue}"
+                                CornerRadius="3" Padding="5,1"
+                                Margin="8,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding AccountTypeLabel}"
+                                       FontSize="9"
+                                       Foreground="White"
+                                       FontWeight="SemiBold"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock FontSize="10"
+                               Foreground="{DynamicResource TextMuted}"
+                               Margin="0,1,0,0">
+                        <Run Text="上次使用："/>
+                        <Run Text="{Binding LastUsedDisplay, Mode=OneWay}"/>
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- 选中 Checkbox（右侧） -->
+                <CheckBox Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
+                          IsChecked="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected, Mode=TwoWay}"
+                          Focusable="False"/>
+            </Grid>
+        </Border>
+
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                <Setter TargetName="cardRoot" Property="Background" Value="{DynamicResource CardHoverBg}"/>
+            </DataTrigger>
+        </DataTemplate.Triggers>
+    </DataTemplate>
+
+    <!-- Home Instance Card (button-free, with selection highlight) -->
+    <DataTemplate x:Key="HomeInstanceCardTemplate">
+        <Border x:Name="cardRoot" Margin="4,2" Padding="14,10" CornerRadius="6"
+                Background="{DynamicResource CardBg}"
+                BorderBrush="{DynamicResource PanelBorder}"
+                BorderThickness="1" Cursor="Hand">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- 卡片内容（左侧） -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                        <TextBlock Text="{Binding DisplayText}" FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"/>
+                        <Border Background="{DynamicResource AccentGreen}"
+                                CornerRadius="3" Padding="5,1"
+                                Margin="8,0,0,0" VerticalAlignment="Center"
+                                Visibility="{Binding ShowIsolatedBadge, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="隔离" FontSize="9"
+                                       Foreground="White"
+                                       FontWeight="SemiBold"/>
+                        </Border>
+                        <Border Background="{DynamicResource AccentBlue}"
+                                CornerRadius="3" Padding="5,1" Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding ShowLoaderBadge, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="{Binding LoaderBadgeText, Mode=OneWay}"
+                                       FontSize="9" Foreground="White"
+                                       FontWeight="SemiBold"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding PathDisplay, Mode=OneWay}"
+                               FontSize="11"
+                               Foreground="{DynamicResource TextSecondary}"
+                               Margin="0,2,12,0"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+
+                <!-- 选中 Checkbox（右侧） -->
+                <CheckBox Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0"
+                          IsChecked="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected, Mode=TwoWay}"
+                          Focusable="False"/>
+            </Grid>
+        </Border>
+
+        <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                <Setter TargetName="cardRoot" Property="Background" Value="{DynamicResource CardHoverBg}"/>
+            </DataTrigger>
+        </DataTemplate.Triggers>
     </DataTemplate>
 
 </ResourceDictionary>

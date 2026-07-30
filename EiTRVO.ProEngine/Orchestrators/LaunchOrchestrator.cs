@@ -72,6 +72,12 @@ public class LaunchOrchestrator
     public Action? HideSaveLockProgress { get; set; }
     public IProgress<(int done, int total)>? SaveLockProgress { get; set; }
 
+    /// <summary>游戏进程每行输出回调。参数：行文本、是否为 stderr。由 MainWindow 注入。</summary>
+    public event Action<string, bool>? GameOutputReceived;
+
+    /// <summary>游戏进程生命周期通知。true=已启动，false=已退出。由 MainWindow 注入。</summary>
+    public event Action<bool>? GameRunningChanged;
+
     public bool IsGameRunning => _gameProcess != null && !_gameProcess.HasExited;
 
     public LaunchOrchestrator(
@@ -183,7 +189,7 @@ public class LaunchOrchestrator
             string userType = "mojang";
             string? instanceGameDir = instance.UseIsolatedDir ? instance.InstanceDir : null;
 
-            if (account != null)
+            if (account != null && account.Type != AccountType.Offline)
             {
                 if (account.Type == AccountType.Microsoft)
                 {
@@ -338,6 +344,35 @@ public class LaunchOrchestrator
             // Inject authlib-injector agent for Yggdrasil
             if (account?.Type == AccountType.Yggdrasil && !string.IsNullOrEmpty(yggdrasilServerUrl))
             {
+                // 安全校验：持久化数据在启动时重新验证，防止离线篡改
+                if (!Uri.TryCreate(yggdrasilServerUrl, UriKind.Absolute, out var yggUri)
+                    || yggUri.Scheme != Uri.UriSchemeHttps)
+                {
+                    _notificationService.AppendLog(
+                        "安全错误：Yggdrasil 服务器 URL 无效或非 HTTPS，已拒绝注入 -javaagent 参数。",
+                        NotificationType.Error);
+                    return new LaunchResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Yggdrasil 服务器 URL 无效。请在账号设置中重新配置。"
+                    };
+                }
+
+                // 安全策略：防止 URL 中的特殊字符注入 JVM 参数（与 AccountViewModel 中的校验一致）
+                if (yggdrasilServerUrl.Contains('=') || yggdrasilServerUrl.Contains(' ')
+                    || yggdrasilServerUrl.Contains('"') || yggdrasilServerUrl.Contains('\'')
+                    || yggdrasilServerUrl.Contains('\n') || yggdrasilServerUrl.Contains('\r'))
+                {
+                    _notificationService.AppendLog(
+                        "安全错误：Yggdrasil 服务器 URL 包含非法字符，已拒绝启动。",
+                        NotificationType.Error);
+                    return new LaunchResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Yggdrasil 服务器 URL 包含非法字符。请在账号设置中重新配置。"
+                    };
+                }
+
                 string agentPath = Path.Combine(_gameFolder.GameDir, "authlib-injector", "authlib-injector.jar");
                 if (File.Exists(agentPath))
                 {
@@ -461,7 +496,12 @@ public class LaunchOrchestrator
                 if (File.Exists(logPath) && detail.Logging.Client.Argument != null)
                 {
                     string logArg = detail.Logging.Client.Argument.Replace("${path}", logPath);
-                    args.Add(JvmArgHelper.StripEmbeddedQuotes(logArg));
+                    logArg = JvmArgHelper.StripEmbeddedQuotes(logArg);
+                    if (JvmArgHelper.IsJvmArgSafe(logArg))
+                        args.Add(logArg);
+                    else
+                        _notificationService.AppendLog(
+                            $"版本 JSON logging 参数被安全策略阻止: {logArg}", NotificationType.Warning);
                 }
             }
         }
@@ -476,10 +516,10 @@ public class LaunchOrchestrator
                     if (elem.ValueKind == JsonValueKind.String)
                     {
                         if (skipNext) { skipNext = false; continue; }
-                        string jvmArg = JvmArgHelper.StripEmbeddedQuotes((elem.GetString() ?? ""));
+                        string jvmArg = JvmArgHelper.StripEmbeddedQuotes((elem.GetString() ?? "")).Trim();
                         if (string.IsNullOrEmpty(jvmArg)) continue;
                         if (jvmArg == "-cp" || jvmArg == "-classpath") { skipNext = true; continue; }
-                        jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir);
+                        jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir, nativePath);
                         if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava)
                                 && JvmArgHelper.IsJvmArgSafe(jvmArg)
                                 && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
@@ -491,9 +531,9 @@ public class LaunchOrchestrator
                         if (value.ValueKind == JsonValueKind.String)
                         {
                             if (skipNext) { skipNext = false; continue; }
-                            string jvmArg = JvmArgHelper.StripEmbeddedQuotes((value.GetString() ?? ""));
+                            string jvmArg = JvmArgHelper.StripEmbeddedQuotes((value.GetString() ?? "")).Trim();
                             if (jvmArg == "-cp" || jvmArg == "-classpath") { skipNext = true; continue; }
-                            jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir);
+                            jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir, nativePath);
                             if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava)
                                     && JvmArgHelper.IsJvmArgSafe(jvmArg)
                                     && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
@@ -504,9 +544,9 @@ public class LaunchOrchestrator
                             foreach (var v in value.EnumerateArray())
                             {
                                 if (skipNext) { skipNext = false; continue; }
-                                string jvmArg = JvmArgHelper.StripEmbeddedQuotes(v.GetString()!);
+                                string jvmArg = JvmArgHelper.StripEmbeddedQuotes(v.GetString()!).Trim();
                                 if (jvmArg == "-cp" || jvmArg == "-classpath") { skipNext = true; continue; }
-                                jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir);
+                                jvmArg = PlaceholderHelper.ReplacePlaceholders(jvmArg, playerName, version, "", "", versionType, accessToken, uuid, _gameFolder.GameDir, instanceGameDir, nativePath);
                                 if (JvmArgHelper.IsJvmArgCompatible(jvmArg, targetJava)
                                         && JvmArgHelper.IsJvmArgSafe(jvmArg)
                                         && !jvmArg.Contains("$(") && !jvmArg.Contains("${"))
@@ -704,7 +744,7 @@ public class LaunchOrchestrator
     /// 仅在实例使用模组加载器时执行。未收录的文件通过 ModsWarningHandler 提示用户。
     /// 返回 null 表示通过或跳过；返回非 null LaunchResult 表示用户拒绝，应中止启动。
     /// </summary>
-    private async Task<LaunchResult?> VerifyModsAsync(GameInstance instance, string? instanceGameDir)
+    internal async Task<LaunchResult?> VerifyModsAsync(GameInstance instance, string? instanceGameDir)
     {
         // 仅模组加载器版本需要检查
         if (string.IsNullOrEmpty(instance.LoaderType) || instance.LoaderType == "Vanilla")
@@ -727,24 +767,45 @@ public class LaunchOrchestrator
         if (jarFiles.Length == 0)
             return null;
 
-        var unverified = new List<string>();
-
-        foreach (var jarPath in jarFiles)
+        // 1) 并行计算所有 JAR 文件 SHA-1
+        var sha1Entries = new List<(string Path, string Sha1, string FileName)>();
+        await Task.Run(() =>
         {
-            string fileName = Path.GetFileName(jarPath);
-            try
+            Parallel.ForEach(jarFiles, jarPath =>
             {
-                string sha1 = await Task.Run(() => ComputeSha1(jarPath));
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                bool verified = await _modrinth.VerifyFileByHashAsync(sha1, cts.Token);
-                if (!verified)
-                    unverified.Add(fileName);
-            }
-            catch
-            {
-                // 网络错误/超时 → 该文件静默跳过，不阻塞启动
-            }
+                try
+                {
+                    string sha1 = ComputeSha1(jarPath);
+                    lock (sha1Entries)
+                        sha1Entries.Add((jarPath, sha1, Path.GetFileName(jarPath)));
+                }
+                catch { /* 跳过不可读文件 */ }
+            });
+        });
+
+        if (sha1Entries.Count == 0)
+            return null;
+
+        // 2) 单次批量 API 查询 (POST /version_files)
+        Dictionary<string, VersionFileResponse> versionFiles;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            versionFiles = await _modrinth.GetVersionFilesByHashesAsync(
+                sha1Entries.Select(e => e.Sha1).ToList(), cts.Token);
         }
+        catch
+        {
+            // 网络错误/超时 → 静默跳过，不阻塞启动
+            return null;
+        }
+
+        // 3) 不在 API 响应中的即视为未收录
+        var verifiedSha1s = new HashSet<string>(versionFiles.Keys, StringComparer.OrdinalIgnoreCase);
+        var unverified = sha1Entries
+            .Where(e => !verifiedSha1s.Contains(e.Sha1))
+            .Select(e => e.FileName)
+            .ToList();
 
         if (unverified.Count == 0)
             return null;
@@ -867,6 +928,9 @@ public class LaunchOrchestrator
                 });
         }
 
+        // Notify listeners that the game process has started
+        GameRunningChanged?.Invoke(true);
+
         try
         {
             var token = _gameCts.Token;
@@ -882,8 +946,9 @@ public class LaunchOrchestrator
                 {
                     while (!_gameProcess.HasExited && !token.IsCancellationRequested)
                     {
-                        await stdoutRdr.ReadLineAsync();
-                        // Game stdout is consumed silently; launcher events use Show/AppendLog
+                        string? line = await stdoutRdr.ReadLineAsync();
+                        if (line != null)
+                            GameOutputReceived?.Invoke(line, false);
                     }
                 }
                 catch { }
@@ -902,6 +967,7 @@ public class LaunchOrchestrator
                         {
                             stderrQueue.Enqueue(line);
                             while (stderrQueue.Count > 20) stderrQueue.TryDequeue(out _);
+                            GameOutputReceived?.Invoke(line, true);
                         }
                     }
                 }
@@ -910,6 +976,9 @@ public class LaunchOrchestrator
 
             var gameStartTime = DateTimeOffset.UtcNow;
             await _gameProcess.WaitForExitAsync(token);
+
+            GameOutputReceived?.Invoke(
+                $"[EiTRVO] 游戏已退出 (退出码: {_gameProcess.ExitCode})", false);
 
             if (_gameProcess.ExitCode != 0)
             {
@@ -939,6 +1008,8 @@ public class LaunchOrchestrator
         finally
         {
             handle?.Dispose();
+            // Notify listeners that the game process has exited
+            GameRunningChanged?.Invoke(false);
         }
     }
 

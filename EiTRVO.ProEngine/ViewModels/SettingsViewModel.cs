@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
@@ -18,7 +19,7 @@ public partial class SettingsViewModel : BaseViewModel
     private readonly IModrinthService _modrinth;
 
     [ObservableProperty]
-    private int _memory = 2048;
+    private int _memory = SystemMemoryInfo.RecommendedDefaultMemoryMB;
 
     [ObservableProperty]
     private string? _selectedResolution;
@@ -27,7 +28,35 @@ public partial class SettingsViewModel : BaseViewModel
     private JavaInfo? _selectedJava;
 
     [ObservableProperty]
-    private string _memoryText = "2048";
+    private string _memoryText = SystemMemoryInfo.RecommendedDefaultMemoryMB.ToString();
+
+    // === 动态内存上限（系统内存感知）===
+
+    /// <summary>滑块最大值 = 总内存的 70%。</summary>
+    public int MaxMemoryMB => SystemMemoryInfo.RecommendedMaxMemoryMB;
+
+    /// <summary>推荐默认内存 = 总内存的 20%（2-8 GB 保底封顶）。</summary>
+    public int RecommendedMemoryMB => SystemMemoryInfo.RecommendedDefaultMemoryMB;
+
+    /// <summary>当前内存值所在区间的步长（用于刻度间距），始终均分为 8 格。</summary>
+    public int CurrentTickFrequency
+    {
+        get
+        {
+            int range = MaxMemoryMB - 256;
+            return Math.Max(128, (int)Math.Round(range / 7.0 / 128.0) * 128);
+        }
+    }
+
+    /// <summary>内存提示文本（系统信息 + 推荐范围）。</summary>
+    public string MemoryHintText
+    {
+        get
+        {
+            double totalGB = SystemMemoryInfo.TotalPhysicalMB / 1024.0;
+            return $"系统内存 {totalGB:F0} GB  |  推荐 {RecommendedMemoryMB / 1024.0:F1} GB  |  上限 {MaxMemoryMB / 1024.0:F1} GB";
+        }
+    }
 
     [ObservableProperty]
     private bool _isCustomResolution;
@@ -81,6 +110,10 @@ public partial class SettingsViewModel : BaseViewModel
     [ObservableProperty]
     private bool _disableChunkedDownload;
 
+    /// <summary>调试模式：跳过 Java 版本兼容性检查。</summary>
+    [ObservableProperty]
+    private bool _debugMode;
+
     /// <summary>上次备份完成时间（UTC），由 MainWindow 同步。</summary>
     [ObservableProperty]
     private DateTimeOffset? _lastBackupTime;
@@ -121,8 +154,8 @@ public partial class SettingsViewModel : BaseViewModel
         new("清理式（删除后还原）", RestoreMode.Clean),
     };
 
-    /// <summary>触发手动备份（由 MainWindow 订阅）。</summary>
-    public event Action? ManualBackupRequested;
+    /// <summary>触发手动备份（由 MainWindow 订阅）。参数为用户选择的备份目标文件夹路径。</summary>
+    public event Action<string>? ManualBackupRequested;
 
     /// <summary>触发恢复（由 MainWindow 订阅）。参数: (备份文件路径, 恢复模式)。</summary>
     public event Action<string, RestoreMode>? RestoreRequested;
@@ -186,13 +219,13 @@ public partial class SettingsViewModel : BaseViewModel
     partial void OnMemoryTextChanged(string value)
     {
         if (int.TryParse(value, out int val))
-            Memory = Math.Clamp(val, 256, 32768);
+            Memory = Math.Clamp(val, 256, MaxMemoryMB);
     }
 
     /// <summary>Apply stored settings to the ViewModel properties.</summary>
     public void ApplySettings(LauncherSettings settings)
     {
-        Memory = settings.MemoryMB > 0 ? settings.MemoryMB : 2048;
+        Memory = settings.MemoryMB > 0 ? settings.MemoryMB : SystemMemoryInfo.RecommendedDefaultMemoryMB;
         SelectedResolution = settings.Resolution;
         UseAutoDetectJava = settings.UseAutoDetectJava;
         ManualJavaPath = settings.ManualJavaPath;
@@ -204,6 +237,7 @@ public partial class SettingsViewModel : BaseViewModel
         BackupFolder = settings.BackupFolder;
         ExcludeRedownloadable = settings.ExcludeRedownloadable;
         DisableChunkedDownload = settings.DisableChunkedDownload;
+        DebugMode = settings.DebugMode;
     }
 
     /// <summary>Snapshot current ViewModel state into a LauncherSettings DTO.</summary>
@@ -225,6 +259,7 @@ public partial class SettingsViewModel : BaseViewModel
             BackupFolder = BackupFolder,
             ExcludeRedownloadable = ExcludeRedownloadable,
             DisableChunkedDownload = DisableChunkedDownload,
+            DebugMode = DebugMode,
             LastBackupTime = null // LastBackupTime is managed by MainWindow, not synced from VM
         };
     }
@@ -306,13 +341,10 @@ public partial class SettingsViewModel : BaseViewModel
     [RelayCommand]
     private async Task BackupNow()
     {
-        if (string.IsNullOrEmpty(BackupFolder))
-        {
-            var path = await _dialogService.ShowFolderBrowserDialogAsync("选择备份文件夹");
-            if (path == null) return;
-            BackupFolder = path;
-        }
-        ManualBackupRequested?.Invoke();
+        // 手动备份始终让用户选择目标文件夹，不依赖自动备份配置
+        var path = await _dialogService.ShowFolderBrowserDialogAsync("选择备份文件夹");
+        if (path == null) return;
+        ManualBackupRequested?.Invoke(path);
     }
 
     [RelayCommand]

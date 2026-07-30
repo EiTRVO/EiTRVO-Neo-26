@@ -10,6 +10,8 @@ public class ModManagementViewModelTests : IDisposable
     private readonly FakeNotificationService _notification;
     private readonly FakeDialogService _dialog;
     private readonly FakeModrinthService _modrinth;
+    private readonly FakeGameFolderService _gameFolder;
+    private readonly FakeDispatcherService _dispatcher;
 
     public ModManagementViewModelTests()
     {
@@ -18,6 +20,8 @@ public class ModManagementViewModelTests : IDisposable
         _notification = new FakeNotificationService();
         _dialog = new FakeDialogService();
         _modrinth = new FakeModrinthService();
+        _gameFolder = new FakeGameFolderService { GameDir = _tempDir, VersionsDir = _tempDir };
+        _dispatcher = new FakeDispatcherService();
     }
 
     public void Dispose()
@@ -28,7 +32,7 @@ public class ModManagementViewModelTests : IDisposable
     [TestMethod]
     public void Constructor_InitializesEmpty()
     {
-        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog);
+        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog, _gameFolder, _dispatcher);
 
         Assert.IsNotNull(vm.Mods);
         Assert.AreEqual(0, vm.Mods.Count);
@@ -42,7 +46,7 @@ public class ModManagementViewModelTests : IDisposable
         File.WriteAllText(Path.Combine(_tempDir, "sodium.jar"), "jar");
         File.WriteAllText(Path.Combine(_tempDir, "readme.txt"), "not a mod");
 
-        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog);
+        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog, _gameFolder, _dispatcher);
         vm.LoadMods("TestInstance", _tempDir, "1.21", "fabric");
 
         Assert.AreEqual(2, vm.Mods.Count);
@@ -52,7 +56,7 @@ public class ModManagementViewModelTests : IDisposable
     [TestMethod]
     public void LoadMods_EmptyFolder_IsEmpty()
     {
-        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog);
+        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog, _gameFolder, _dispatcher);
         vm.LoadMods("TestInstance", _tempDir, "1.21", "vanilla");
 
         Assert.AreEqual(0, vm.Mods.Count);
@@ -62,7 +66,7 @@ public class ModManagementViewModelTests : IDisposable
     [TestMethod]
     public void LoadMods_SetsInstanceInfo()
     {
-        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog);
+        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog, _gameFolder, _dispatcher);
         vm.LoadMods("MyInstance", _tempDir, "1.21", "forge");
 
         Assert.AreEqual("MyInstance", vm.InstanceName);
@@ -73,7 +77,7 @@ public class ModManagementViewModelTests : IDisposable
     [TestMethod]
     public void SelectTab_ChangesView()
     {
-        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog);
+        var vm = new ModManagementViewModel(_modrinth, _notification, _dialog, _gameFolder, _dispatcher);
 
         vm.SelectTabCommand.Execute("download");
         Assert.AreEqual("download", vm.SelectedTab);

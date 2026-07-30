@@ -1,3 +1,5 @@
+using System.Net.Http;
+using System.Threading.Tasks;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
 using EiTRVO.ProEngine.ViewModels;
@@ -114,5 +116,152 @@ public class AccountViewModelTests : IDisposable
         vm.RemoveAccountCommand.Execute("uuid-rm");
 
         Assert.IsNull(_accountManager.FindByUuid("uuid-rm"));
+    }
+
+    // ================================================================
+    // YggdrasilLogin — Security character filtering
+    // ================================================================
+
+    private AccountViewModel CreateYggdrasilTestVm()
+    {
+        return new AccountViewModel(
+            _authService, _accountManager, _httpClient,
+            _notification, _dialog, _clipboard, _process);
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_EmptyUrl_Rejected()
+    {
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "pwd";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(_notification.LastShowMessage!, "请输入验证服务器 URL");
+        Assert.AreEqual(EiTRVO.ProEngine.Models.NotificationType.Warning, _notification.LastShowType);
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_WhitespaceOnlyUrl_Rejected()
+    {
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "   ";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "pwd";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(_notification.LastShowMessage!, "请输入验证服务器 URL");
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_NonHttpsUrl_Rejected()
+    {
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "http://auth.example.com";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "pwd";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(_notification.LastShowMessage!, "https://");
+        Assert.AreEqual(EiTRVO.ProEngine.Models.NotificationType.Warning, _notification.LastShowType);
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_UrlWithEquals_Rejected()
+    {
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "https://auth.example.com?token=abc";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "pwd";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(_notification.LastShowMessage!, "非法字符");
+        Assert.AreEqual(EiTRVO.ProEngine.Models.NotificationType.Warning, _notification.LastShowType);
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_UrlWithSpace_Rejected()
+    {
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "https://auth.example.com/inject ed";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "pwd";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(_notification.LastShowMessage!, "非法字符");
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_UrlWithDoubleQuote_Rejected()
+    {
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "https://auth.example.com/\"inject";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "pwd";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(_notification.LastShowMessage!, "非法字符");
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_UrlWithSingleQuote_Rejected()
+    {
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "https://auth.example.com/'inject";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "pwd";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(_notification.LastShowMessage!, "非法字符");
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_UrlWithNewline_Rejected()
+    {
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "https://auth.example.com\ninject";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "pwd";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        StringAssert.Contains(_notification.LastShowMessage!, "非法字符");
+    }
+
+    [TestMethod]
+    public async Task YggdrasilLogin_ValidUrl_DoesNotTriggerSecurityWarning()
+    {
+        _authService.YggdrasilAuthResult = new EiTRVO.ProEngine.Models.Account
+        {
+            Username = "TestPlayer",
+            UUID = "abc123def456abc123def456abc123de",
+            Type = EiTRVO.ProEngine.Models.AccountType.Yggdrasil,
+            YggdrasilServerUrl = "https://auth.example.com",
+            YggdrasilEmail = "test@test.com",
+            YggdrasilAccessToken = "token-abc",
+            YggdrasilClientToken = "client-xyz"
+        };
+
+        var vm = CreateYggdrasilTestVm();
+        vm.YggdrasilServerUrl = "https://auth.example.com";
+        vm.YggdrasilEmail = "test@test.com";
+        vm.YggdrasilPassword = "correct-horse-battery-staple";
+
+        await vm.YggdrasilLoginCommand.ExecuteAsync(null);
+
+        // Should not have shown any security warning
+        Assert.IsFalse(
+            (_notification.LastShowMessage?.Contains("非法字符") == true) ||
+            (_notification.LastShowMessage?.Contains("https://") == true) ||
+            (_notification.LastShowMessage?.Contains("验证服务器 URL") == true),
+            "Security warning was incorrectly shown for valid URL.");
     }
 }

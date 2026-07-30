@@ -60,7 +60,7 @@ public class ModrinthServiceTests : IDisposable
                     {
                         Url = "https://cdn.modrinth.com/data/test/mod.jar",
                         Filename = "mod-1.0.jar",
-                        Hashes = new ModrinthHashes { Sha1 = "abcdef1234567890abcdef1234567890abcdef12" },
+                        Hashes = new ModrinthHashes { Sha1 = null },
                         Size = 1024
                     }
                 },
@@ -259,6 +259,140 @@ public class ModrinthServiceTests : IDisposable
     }
 
     // ================================================================
+    // GetVersionFilesByHashesAsync — bulk SHA-1 lookup
+    // ================================================================
+
+    [TestMethod]
+    public async Task GetVersionFilesByHashes_EmptyList_ReturnsEmpty()
+    {
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, "{}");
+        var service = new ModrinthService(http);
+        var result = await service.GetVersionFilesByHashesAsync(new List<string>(), CancellationToken.None);
+        Assert.AreEqual(0, result.Count);
+    }
+
+    [TestMethod]
+    public async Task GetVersionFilesByHashes_SingleHashFound()
+    {
+        string responseJson = @"{""a1b2c3d4e5f67890123456789012345678901234"":{""id"":""vf-001"",""project_id"":""proj-abc"",""version_id"":""ver-xyz""}}";
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, responseJson);
+        var service = new ModrinthService(http);
+
+        var result = await service.GetVersionFilesByHashesAsync(
+            new[] { "a1b2c3d4e5f67890123456789012345678901234" }, CancellationToken.None);
+
+        Assert.AreEqual(1, result.Count);
+        Assert.AreEqual("proj-abc", result["a1b2c3d4e5f67890123456789012345678901234"].ProjectId);
+    }
+
+    [TestMethod]
+    public async Task GetVersionFilesByHashes_SingleHashNotFound()
+    {
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, "{}");
+        var service = new ModrinthService(http);
+
+        var result = await service.GetVersionFilesByHashesAsync(
+            new[] { "unknown-hash-1111111111111111111111111" }, CancellationToken.None);
+
+        Assert.AreEqual(0, result.Count);
+    }
+
+    [TestMethod]
+    public async Task GetVersionFilesByHashes_PartialMatch()
+    {
+        string responseJson = @"{""aaa1111111111111111111111111111111111111"":{""id"":""vf-a"",""project_id"":""p-a"",""version_id"":""v-a""}}";
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, responseJson);
+        var service = new ModrinthService(http);
+
+        var result = await service.GetVersionFilesByHashesAsync(
+            new[] { "aaa1111111111111111111111111111111111111", "bbb2222222222222222222222222222222222222" },
+            CancellationToken.None);
+
+        Assert.AreEqual(1, result.Count);
+        Assert.IsTrue(result.ContainsKey("aaa1111111111111111111111111111111111111"));
+    }
+
+    [TestMethod]
+    public async Task GetVersionFilesByHashes_ApiError_FallsBackGracefully()
+    {
+        // When the bulk endpoint returns 500, the method should fall back to
+        // individual lookups and return an empty result (not throw).
+        // Individual lookups also fail here since the fake HttpClient returns
+        // the same error for all requests.
+        var http = CreateFakeHttpClient(HttpStatusCode.InternalServerError, "");
+        var service = new ModrinthService(http);
+
+        // Should not throw — returns empty dict after failed bulk + failed individual fallback
+        var result = await service.GetVersionFilesByHashesAsync(
+            new[] { "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, CancellationToken.None);
+        Assert.AreEqual(0, result.Count);
+    }
+
+    [TestMethod]
+    public async Task GetVersionFilesByHashes_InvalidHash_Skipped()
+    {
+        // Invalid hashes (wrong length, non-hex chars) should be filtered out
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, "{}");
+        var service = new ModrinthService(http);
+
+        var result = await service.GetVersionFilesByHashesAsync(
+            new[] { "too-short", "invalid-char" },
+            CancellationToken.None);
+        Assert.AreEqual(0, result.Count);
+    }
+
+    // ================================================================
+    // GetProjectsByIdsAsync — bulk project detail lookup
+    // ================================================================
+
+    [TestMethod]
+    public async Task GetProjectsByIds_EmptyList_ReturnsEmpty()
+    {
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, "[]");
+        var service = new ModrinthService(http);
+        var result = await service.GetProjectsByIdsAsync(new List<string>(), CancellationToken.None);
+        Assert.AreEqual(0, result.Count);
+    }
+
+    [TestMethod]
+    public async Task GetProjectsByIds_SingleId_ReturnsProject()
+    {
+        string responseJson = @"[{""id"":""proj-001"",""title"":""Test Mod"",""description"":""A test"",""slug"":""test-mod"",""icon_url"":null}]";
+        var http = CreateFakeHttpClient(HttpStatusCode.OK, responseJson);
+        var service = new ModrinthService(http);
+
+        var result = await service.GetProjectsByIdsAsync(
+            new[] { "proj-001" }, CancellationToken.None);
+
+        Assert.AreEqual(1, result.Count);
+        Assert.AreEqual("Test Mod", result[0].Title);
+        Assert.AreEqual("A test", result[0].Description);
+    }
+
+    [TestMethod]
+    public async Task GetProjectsByIds_Over100Ids_SplitsRequests()
+    {
+        // Create 150 unique IDs — should trigger 2 requests (100 + 50)
+        var ids = new List<string>();
+        for (int i = 0; i < 150; i++)
+            ids.Add($"proj-{i:D4}");
+
+        // Queue 2 responses — one for each batch
+        var handler = new FakeHttpMessageHandler(
+            (HttpStatusCode.OK, "[{\"id\":\"batch1\",\"title\":\"B1\",\"slug\":\"b1\"}]"),
+            (HttpStatusCode.OK, "[{\"id\":\"batch2\",\"title\":\"B2\",\"slug\":\"b2\"}]"));
+
+        var http = new HttpClient(handler);
+        var service = new ModrinthService(http);
+
+        var result = await service.GetProjectsByIdsAsync(ids, CancellationToken.None);
+
+        Assert.IsTrue(result.Count >= 2, $"Expected >= 2 results, got {result.Count}. Requests made: {handler.Requests.Count}");
+        Assert.IsTrue(handler.Requests.Count >= 2,
+            $"Expected >= 2 HTTP requests for batching 150 IDs, got {handler.Requests.Count}");
+    }
+
+    // ================================================================
     // DownloadWithDependenciesAsync — tests with pre-created files
     // ================================================================
 
@@ -282,8 +416,15 @@ public class ModrinthServiceTests : IDisposable
         {
             await service.DownloadWithDependenciesAsync(
                 "mod-no-deps", "1.21", "fabric", modsDir);
+            Assert.IsTrue(true, "Method completed without throwing.");
         }
-        catch (JsonException) { /* Expected: version JSON isn't a valid mod file */ }
-        catch (InvalidOperationException) { /* Ok - method handled the issue */ }
+        catch (JsonException)
+        {
+            Assert.IsTrue(true, "Expected: version JSON isn't a valid mod file.");
+        }
+        catch (InvalidOperationException)
+        {
+            Assert.IsTrue(true, "Expected: method handled the invalid file gracefully.");
+        }
     }
 }

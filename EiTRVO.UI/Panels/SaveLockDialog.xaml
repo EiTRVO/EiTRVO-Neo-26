@@ -87,15 +87,13 @@
             <StackPanel x:Name="pnlNoMsAccount" Visibility="Collapsed">
                 <CheckBox Content="导出恢复文件 (需要微软账户)" IsEnabled="False"
                           Foreground="{DynamicResource TextMuted}" Margin="0,2,0,6" FontSize="11"/>
-                <TextBlock Text="未登录微软账户，.savrec 不可用。密钥备份文件 (.savkey) 绑"
-                           FontSize="11" Foreground="{DynamicResource TextMuted}"
-                           TextWrapping="Wrap" Margin="0,0,0,10"/>
-                <TextBlock Text="定当前 Windows 用户，换设备或重装系统后无法恢复。建议登"
-                           FontSize="11" Foreground="{DynamicResource AccentRed}"
-                           TextWrapping="Wrap" Margin="0,0,0,4"/>
-                <TextBlock Text="录微软账户以启用跨设备恢复。"
-                           FontSize="11" Foreground="{DynamicResource AccentRed}"
-                           TextWrapping="Wrap" Margin="0,0,0,10"/>
+                <TextBlock FontSize="11" TextWrapping="Wrap" Margin="0,0,0,10">
+                    <Run Text="未登录微软账户，.savrec 不可用。密钥备份文件 (.savkey) 绑定当前 Windows 用户，换设备或重装系统后无法恢复。"
+                         Foreground="{DynamicResource TextMuted}"/>
+                    <LineBreak/>
+                    <Run Text="建议登录微软账户以启用跨设备恢复。"
+                         Foreground="{DynamicResource AccentRed}"/>
+                </TextBlock>
             </StackPanel>
 
             <!-- Separator -->

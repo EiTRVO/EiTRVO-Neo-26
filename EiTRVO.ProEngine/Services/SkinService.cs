@@ -30,6 +30,9 @@ public class SkinService
     /// </summary>
     public async Task<byte[]?> DownloadSkinPngAsync(string url, CancellationToken ct = default)
     {
+        if (!DownloadSafetyHelper.IsDownloadUrlAllowed(url))
+            return null;
+
         try
         {
             return await _httpClient.GetByteArrayAsync(url, ct);
@@ -53,6 +56,9 @@ public class SkinService
             return null;
 
         // Step 2: 从 textures.minecraft.net 下载 PNG
+        if (!DownloadSafetyHelper.IsDownloadUrlAllowed(textureUrl))
+            return null;
+
         try
         {
             return await _httpClient.GetByteArrayAsync(textureUrl, ct);

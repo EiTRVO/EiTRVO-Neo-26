@@ -111,6 +111,39 @@ public class BackupServiceTests : IDisposable
     }
 
     // ================================================================
+    // GetNextBackupDisplay — static
+    // ================================================================
+
+    [TestMethod]
+    public void GetNextBackupDisplay_EveryLaunch_ReturnsEventDriven()
+    {
+        var display = BackupService.GetNextBackupDisplay(BackupInterval.EveryLaunch, null);
+        StringAssert.Contains(display, "下次备份");
+        StringAssert.Contains(display, "启动时");
+    }
+
+    [TestMethod]
+    public void GetNextBackupDisplay_Daily_NoPrevious_ReturnsSoonDate()
+    {
+        var display = BackupService.GetNextBackupDisplay(BackupInterval.Daily, null);
+        Assert.IsFalse(string.IsNullOrEmpty(display));
+    }
+
+    [TestMethod]
+    public void GetNextBackupDisplay_Daily_RecentBackup_ReturnsDate()
+    {
+        var display = BackupService.GetNextBackupDisplay(BackupInterval.Daily, DateTimeOffset.UtcNow);
+        Assert.IsFalse(string.IsNullOrEmpty(display));
+    }
+
+    [TestMethod]
+    public void GetNextBackupDisplay_Weekly_ReturnsDate()
+    {
+        var display = BackupService.GetNextBackupDisplay(BackupInterval.Weekly, DateTimeOffset.UtcNow);
+        StringAssert.Contains(display, "下次备份");
+    }
+
+    // ================================================================
     // ValidateBackupFile — static
     // ================================================================
 

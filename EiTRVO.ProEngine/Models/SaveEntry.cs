@@ -29,7 +29,9 @@ public partial class SaveEntry : ObservableObject
     // ==================== 存档锁相关属性 ====================
 
     /// <summary>是否为已加密存档（true = .savenc 文件，false = 普通文件夹）</summary>
-    public bool IsLocked { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNotBackedUpBadge))]
+    private bool _isLocked;
 
     /// <summary>加密模式显示文本："一次性" / "永久"（未加密时为 null）</summary>
     public string? LockModeDisplay { get; set; }
@@ -47,7 +49,9 @@ public partial class SaveEntry : ObservableObject
     public string? SavencPath { get; set; }
 
     /// <summary>AES 密钥是否已备份到 OneDrive</summary>
-    public bool OneDriveBackedUp { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowNotBackedUpBadge))]
+    private bool _oneDriveBackedUp;
 
     /// <summary>存档类型："folder"（普通文件夹）或 "savenc"（加密文件）</summary>
     public string SaveType { get; set; } = "folder";

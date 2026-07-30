@@ -1,0 +1,110 @@
+<UserControl x:Class="EiTRVO.UI.Panels.WizardPage4_Summary"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="500" Margin="0,0,0,40">
+            <!-- Title -->
+            <TextBlock Text="感谢您使用" FontSize="16" FontWeight="Light"
+                       Foreground="{DynamicResource TextSecondary}"
+                       Margin="0,0,0,4"/>
+            <TextBlock Text="EiTRVO Neo" FontSize="28" FontWeight="Bold"
+                       Foreground="{DynamicResource AccentBlue}"
+                       Margin="0,0,0,20"/>
+
+            <TextBlock Text="以下是本次配置的摘要：" FontSize="14"
+                       Foreground="{DynamicResource TextPrimary}"
+                       Margin="0,0,0,14"/>
+
+            <!-- Config Summary -->
+            <Border Background="{DynamicResource Surface}" CornerRadius="8"
+                    Padding="18,16" Margin="0,0,0,20">
+                <StackPanel>
+                    <!-- Firewall -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding FirewallSummary}" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Backup -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding BackupSummary}" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Accounts -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding AccountSummary}" FontSize="13"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="功能介绍位置指南" FontSize="14" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimary}"
+                       Margin="0,0,0,10"/>
+
+            <!-- Feature location guide -->
+            <Border Background="{DynamicResource Surface}" CornerRadius="8"
+                    Padding="18,16">
+                <StackPanel>
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="存档锁" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentBlue}"/>
+                        <TextBlock Text="管理 → 实例详情 → 存档锁" FontSize="12"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   Margin="0,2,0,0"/>
+                        <TextBlock Text="使用 AES-256 加密保护您的存档免遭未授权访问。"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="Mod 下载" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentGreen}"/>
+                        <TextBlock Text="下载 → 浏览版本并安装 → Mod 管理" FontSize="12"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   Margin="0,2,0,0"/>
+                        <TextBlock Text="从 Modrinth 浏览并下载模组，自动适配 Fabric/Forge。"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,0,10">
+                        <TextBlock Text="整合包导入/下载" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentOrange}"/>
+                        <TextBlock Text="下载 → 整合包下载 / 管理 → 拖入整合包" FontSize="12"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   Margin="0,2,0,0"/>
+                        <TextBlock Text="支持 .mrpack（Modrinth）和 .zip 格式的整合包。"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel>
+                        <TextBlock Text="资源包/光影下载" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentYellow}"/>
+                        <TextBlock Text="管理 → 实例详情 → 资源包 / 光影" FontSize="12"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   Margin="0,2,0,0"/>
+                        <TextBlock Text="从 Modrinth 浏览并下载资源包和光影，自动适配格式。"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextMuted}"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="点击「完成」按钮即可保存设置并进入启动器。"
+                       FontSize="12"
+                       Foreground="{DynamicResource TextMuted}"
+                       Margin="0,14,0,0"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

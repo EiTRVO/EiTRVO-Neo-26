@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,8 @@ public partial class ManageViewModel : BaseViewModel
     private readonly System.Net.Http.HttpClient _httpClient;
     private readonly IDialogService _dialogService;
     private readonly IProcessService _processService;
+    private readonly IMrpackInstallService _mrpackInstall;
+    private readonly JavaDetectionService _javaDetection;
 
     private CancellationTokenSource? _activeDownloadCts;
     private readonly object _downloadLock = new();
@@ -44,14 +47,29 @@ public partial class ManageViewModel : BaseViewModel
     [ObservableProperty]
     private string _currentFileProgress = "";
 
+    [ObservableProperty]
+    private double _fileProgressValue;
+
+    [ObservableProperty]
+    private bool _isFileProgressIndeterminate;
+
+    [ObservableProperty]
+    private string _versionDisplay = "";
+
+    [ObservableProperty]
+    private string _loaderDisplay = "";
+
     /// <summary>Raised when the View should show/hide the download progress overlay.</summary>
     public event Action<bool>? DownloadProgressChanged;
 
-    /// <summary>Raised when the View should update progress UI.</summary>
-    public event Action<DownloadProgress>? FileProgressUpdated;
-
     /// <summary>Raised when an import/export needs settings (Java path, isolation default).</summary>
     public Func<LauncherSettings>? SettingsProvider;
+
+    /// <summary>Java 兼容性检查（下载流程）— 由 MainWindow 注入。</summary>
+    public Func<string, string, Task<string?>>? DownloadJavaCompatibilityHandler { get; set; }
+
+    /// <summary>Java 自动检测回调 — 由 MainWindow 注入，将自动检测到的 Java 保存到设置。</summary>
+    public Func<JavaInfo, Task>? JavaDetectedCallback { get; set; }
 
     /// <summary>Raised when the user clicks "管理" on an instance card. Parameter is the instance name.</summary>
     public event Action<string>? NavigateToInstanceDetail;
@@ -65,7 +83,9 @@ public partial class ManageViewModel : BaseViewModel
         IModLoaderService modLoaderService,
         System.Net.Http.HttpClient httpClient,
         IDialogService dialogService,
-        IProcessService processService)
+        IProcessService processService,
+        IMrpackInstallService mrpackInstall,
+        JavaDetectionService javaDetection)
     {
         _instanceManager = instanceManager;
         _packService = packService;
@@ -76,6 +96,8 @@ public partial class ManageViewModel : BaseViewModel
         _httpClient = httpClient;
         _dialogService = dialogService;
         _processService = processService;
+        _mrpackInstall = mrpackInstall;
+        _javaDetection = javaDetection;
     }
 
     [RelayCommand]
@@ -160,7 +182,32 @@ public partial class ManageViewModel : BaseViewModel
         if (savePath == null) return;
 
         DownloadProgressChanged?.Invoke(true);
-        var progress = new Progress<DownloadProgress>(p => FileProgressUpdated?.Invoke(p));
+        var progress = new Progress<DownloadProgress>(p =>
+        {
+            if (p.TotalBytes > 0)
+            {
+                double percent = (double)p.BytesDownloaded / p.TotalBytes * 100.0;
+                DownloadProgressValue = percent;
+                IsProgressIndeterminate = false;
+                ProgressText = $"文件 {p.BytesDownloaded}/{p.TotalBytes}  {percent:F0}%";
+            }
+            if (!string.IsNullOrEmpty(p.CurrentFileName))
+            {
+                string sizePart = p.CurrentFileTotalBytes > 0
+                    ? $"{FormatByteSize(p.CurrentFileDownloadedBytes)} / {FormatByteSize(p.CurrentFileTotalBytes)}"
+                    : FormatByteSize(p.CurrentFileDownloadedBytes);
+                string speedPart = p.DownloadSpeedBytesPerSecond > 0
+                    ? $"  ·  {FormatByteSize((long)p.DownloadSpeedBytesPerSecond)}/s"
+                    : "";
+                CurrentFileProgress = $"{p.CurrentFileName}  {sizePart}{speedPart}";
+                if (p.CurrentFileTotalBytes > 0)
+                {
+                    FileProgressValue = (double)p.CurrentFileDownloadedBytes / p.CurrentFileTotalBytes * 100.0;
+                    IsFileProgressIndeterminate = false;
+                }
+                else { IsFileProgressIndeterminate = true; }
+            }
+        });
 
         try
         {
@@ -183,13 +230,28 @@ public partial class ManageViewModel : BaseViewModel
     [RelayCommand]
     private async Task ImportAsync()
     {
-        var filePath = await _dialogService.ShowOpenFileDialogAsync("选择整合包文件", "整合包文件|*.zip");
+        var filePath = await _dialogService.ShowOpenFileDialogAsync("选择整合包文件", "整合包文件|*.zip;*.mrpack");
         if (filePath == null) return;
         await ImportPackAsync(filePath);
     }
 
-    /// <summary>Import a modpack from a .zip file path (used by drag-drop too).</summary>
+    /// <summary>Import a modpack from a file path. Supports .zip (eitrvo-pack) and .mrpack (Modrinth) formats.</summary>
     public async Task ImportPackAsync(string packPath)
+    {
+        // Detect format by extension
+        bool isMrpack = packPath.EndsWith(".mrpack", StringComparison.OrdinalIgnoreCase);
+
+        if (isMrpack)
+        {
+            await ImportMrpackAsync(packPath);
+            return;
+        }
+
+        await ImportZipPackAsync(packPath);
+    }
+
+    /// <summary>Import a native .zip modpack (eitrvo-pack format).</summary>
+    private async Task ImportZipPackAsync(string packPath)
     {
         CancellationTokenSource cts;
         lock (_downloadLock)
@@ -245,6 +307,35 @@ public partial class ManageViewModel : BaseViewModel
         string mcVersion = versionDetail?.InheritsFrom ?? manifest.InheritsFrom ?? manifest.Minecraft?.Version ?? "";
         string? inheritsFrom = versionDetail?.InheritsFrom ?? manifest.InheritsFrom;
 
+        // === 安全扫描：有害整合包检测 ===
+        var safetyReport = ModpackSafetyScanner.ScanZipPack(packPath);
+        if (safetyReport.HasBlockingIssues)
+        {
+            var msg = "此整合包未通过安全检查，已拒绝导入：\n" +
+                      string.Join("\n", safetyReport.BlockingIssues.Take(10));
+            _notificationService.Show(msg, NotificationType.Error);
+            return;
+        }
+        if (safetyReport.HasWarnings)
+        {
+            var warnMsg = "此整合包存在以下安全风险：\n" +
+                          string.Join("\n", safetyReport.Warnings.Take(10)) +
+                          "\n\n是否继续导入？";
+            if (!await _dialogService.ShowConfirmAsync(warnMsg, "安全警告"))
+                return;
+        }
+
+        // 安全校验：version.json 深度扫描（mainClass + JVM 参数）
+        ModpackSafetyScanner.ScanVersionJson(versionDetail, safetyReport);
+        if (safetyReport.HasBlockingIssues)
+        {
+            // Re-check after version.json scan
+            var msg = "此整合包未通过安全检查，已拒绝导入：\n" +
+                      string.Join("\n", safetyReport.BlockingIssues.Take(10));
+            _notificationService.Show(msg, NotificationType.Error);
+            return;
+        }
+
         // 安全校验：mainClass 分层检查
         string? mainClass = versionDetail?.MainClass;
         if (JvmArgHelper.IsMainClassBlocked(mainClass))
@@ -262,6 +353,11 @@ public partial class ManageViewModel : BaseViewModel
             if (!await _dialogService.ShowConfirmAsync(warningMsg, "安全警告"))
                 return;
         }
+
+        VersionDisplay = mcVersion;
+        LoaderDisplay = !string.IsNullOrEmpty(manifest.Minecraft?.ModLoader) && !string.IsNullOrEmpty(manifest.Minecraft?.ModLoaderVersion)
+            ? $"{manifest.Minecraft.ModLoader} {manifest.Minecraft.ModLoaderVersion}"
+            : "";
 
         DownloadProgressChanged?.Invoke(true);
         ProgressText = "准备导入...";
@@ -289,8 +385,13 @@ public partial class ManageViewModel : BaseViewModel
                     ? $"  ·  {FormatByteSize((long)p.DownloadSpeedBytesPerSecond)}/s"
                     : "";
                 CurrentFileProgress = $"{p.CurrentFileName}  {sizePart}{speedPart}";
+                if (p.CurrentFileTotalBytes > 0)
+                {
+                    FileProgressValue = (double)p.CurrentFileDownloadedBytes / p.CurrentFileTotalBytes * 100.0;
+                    IsFileProgressIndeterminate = false;
+                }
+                else { IsFileProgressIndeterminate = true; }
             }
-            FileProgressUpdated?.Invoke(p);
         });
 
         try
@@ -329,7 +430,34 @@ public partial class ManageViewModel : BaseViewModel
                 {
                     javaPath = settings.JavaPath;
                     if (string.IsNullOrEmpty(javaPath))
-                        throw new Exception($"{loaderType} 安装需要配置 Java 路径。请在设置中指定 Java。");
+                    {
+                        // 按需自动检测 + 版本感知选择
+                        var autoDetected = await _javaDetection.ResolveJavaPathAsync(settings, mcVersion);
+                        if (autoDetected != null)
+                        {
+                            javaPath = autoDetected;
+                            _notificationService.Show($"已自动检测到 Java 运行环境：{autoDetected}", NotificationType.Success);
+                            if (JavaDetectedCallback != null)
+                            {
+                                var javas = await _javaDetection.DetectAsync();
+                                var detectedInfo = javas.FirstOrDefault(j => j.Path == autoDetected);
+                                if (detectedInfo != null) await JavaDetectedCallback(detectedInfo);
+                            }
+                        }
+                        else
+                        {
+                            throw new Exception(
+                                $"{loaderType} 安装需要 Java 环境。未在 PATH 或 JAVA_HOME 中检测到 Java，请安装 Java 或前往设置手动配置。");
+                        }
+                    }
+
+                    // Java 兼容性检查
+                    if (DownloadJavaCompatibilityHandler != null)
+                    {
+                        var resolved = await DownloadJavaCompatibilityHandler(javaPath, mcVersion);
+                        if (resolved == null) throw new OperationCanceledException("用户取消安装。");
+                        javaPath = resolved;
+                    }
                 }
 
                 Directory.CreateDirectory(targetDir);
@@ -389,7 +517,7 @@ public partial class ManageViewModel : BaseViewModel
                             ?? throw new Exception($"无法在 Mojang 版本清单中找到版本 {baseVersion}。");
                         await _downloadService.DownloadVersionFilesAsync(
                             _httpClient, _gameFolder.GameDir, parentManifest.Url,
-                            baseVersion, instanceName, progress, _notificationService.Show);
+                            baseVersion, instanceName, progress, _notificationService.Show, ct);
                     }
                 }
             }
@@ -415,6 +543,176 @@ public partial class ManageViewModel : BaseViewModel
         catch (Exception ex)
         {
             _notificationService.WriteDiagnosticLog("导入整合包失败", ex.ToString());
+            _notificationService.Show($"导入失败：{ex.Message}", NotificationType.Error);
+            try { if (Directory.Exists(targetDir)) Directory.Delete(targetDir, true); }
+            catch { /* best effort */ }
+        }
+        finally
+        {
+            DownloadProgressChanged?.Invoke(false);
+            _instanceManager.Refresh(_notificationService.AppendLog);
+        }
+    }
+
+    /// <summary>Import a .mrpack modpack (Modrinth format).</summary>
+    private async Task ImportMrpackAsync(string mrpackPath)
+    {
+        CancellationTokenSource cts;
+        lock (_downloadLock)
+        {
+            _activeDownloadCts?.Cancel();
+            _activeDownloadCts?.Dispose();
+            _activeDownloadCts = new CancellationTokenSource();
+            cts = _activeDownloadCts;
+        }
+        var ct = cts.Token;
+
+        // Phase 1: safety scan before doing anything
+        var safetyReport = ModpackSafetyScanner.ScanMrpack(mrpackPath);
+        if (safetyReport.HasBlockingIssues)
+        {
+            var msg = "此整合包未通过安全检查，已拒绝导入：\n" +
+                      string.Join("\n", safetyReport.BlockingIssues.Take(10));
+            _notificationService.Show(msg, NotificationType.Error);
+            return;
+        }
+        if (safetyReport.HasWarnings)
+        {
+            var warnMsg = "此整合包存在以下安全风险：\n" +
+                          string.Join("\n", safetyReport.Warnings.Take(10)) +
+                          "\n\n是否继续导入？";
+            if (!await _dialogService.ShowConfirmAsync(warnMsg, "安全警告"))
+                return;
+        }
+
+        // Phase 2: parse manifest
+        MrpackInfo info;
+        try
+        {
+            info = await _mrpackInstall.ParseMrpackAsync(mrpackPath, ct);
+        }
+        catch (Exception ex)
+        {
+            _notificationService.Show($"无效的整合包：{ex.Message}", NotificationType.Error);
+            return;
+        }
+
+        string mcVersion = info.McVersion;
+        if (string.IsNullOrEmpty(mcVersion))
+        {
+            _notificationService.Show("整合包清单中未指定 Minecraft 版本，无法导入。", NotificationType.Error);
+            return;
+        }
+
+        string instanceName = PathSafetyHelper.SanitizeNameComponent(
+            info.Manifest.Name ?? Path.GetFileNameWithoutExtension(mrpackPath));
+        if (string.IsNullOrWhiteSpace(instanceName)) instanceName = "ImportedMrpack";
+
+        string targetDir = Path.Combine(_gameFolder.GameDir, "versions", instanceName);
+        if (Directory.Exists(targetDir))
+        {
+            int suffix = 1;
+            while (Directory.Exists(Path.Combine(_gameFolder.GameDir, "versions", $"{instanceName}_{suffix}")))
+                suffix++;
+            instanceName = $"{instanceName}_{suffix}";
+            targetDir = Path.Combine(_gameFolder.GameDir, "versions", instanceName);
+        }
+
+        VersionDisplay = mcVersion;
+        LoaderDisplay = !string.IsNullOrEmpty(info.LoaderType) && !string.IsNullOrEmpty(info.LoaderVersionSpec)
+            ? $"{info.LoaderType} {info.LoaderVersionSpec}"
+            : "";
+
+        DownloadProgressChanged?.Invoke(true);
+        ProgressText = "准备导入...";
+        IsProgressIndeterminate = true;
+        DownloadProgressValue = 0;
+        var progress = new Progress<DownloadProgress>(p =>
+        {
+            if (p.TotalBytes > 0)
+            {
+                long completed = p.BytesDownloaded;
+                long total = p.TotalBytes;
+                double percent = (double)completed / total * 100.0;
+                DownloadProgressValue = percent;
+                IsProgressIndeterminate = false;
+                ProgressText = $"文件 {completed}/{total} (剩余 {total - completed})  {percent:F0}%";
+            }
+            if (!string.IsNullOrEmpty(p.CurrentFileName))
+            {
+                string sizePart = p.CurrentFileTotalBytes > 0
+                    ? $"{FormatByteSize(p.CurrentFileDownloadedBytes)} / {FormatByteSize(p.CurrentFileTotalBytes)}"
+                    : FormatByteSize(p.CurrentFileDownloadedBytes);
+                string speedPart = p.DownloadSpeedBytesPerSecond > 0
+                    ? $"  ·  {FormatByteSize((long)p.DownloadSpeedBytesPerSecond)}/s"
+                    : "";
+                CurrentFileProgress = $"{p.CurrentFileName}  {sizePart}{speedPart}";
+                if (p.CurrentFileTotalBytes > 0)
+                {
+                    FileProgressValue = (double)p.CurrentFileDownloadedBytes / p.CurrentFileTotalBytes * 100.0;
+                    IsFileProgressIndeterminate = false;
+                }
+                else { IsFileProgressIndeterminate = true; }
+            }
+        });
+
+        try
+        {
+            var settings = SettingsProvider?.Invoke() ?? new LauncherSettings();
+
+            // Determine Java path for Forge/NeoForge
+            string? javaPath = null;
+            if (info.LoaderType is "Forge" or "NeoForge")
+            {
+                javaPath = settings.JavaPath;
+                if (string.IsNullOrEmpty(javaPath))
+                {
+                    // 按需自动检测 + 版本感知选择
+                    var autoDetected = await _javaDetection.ResolveJavaPathAsync(settings, mcVersion);
+                    if (autoDetected != null)
+                    {
+                        javaPath = autoDetected;
+                        _notificationService.Show($"已自动检测到 Java 运行环境：{autoDetected}", NotificationType.Success);
+                        if (JavaDetectedCallback != null)
+                        {
+                            var javas = await _javaDetection.DetectAsync();
+                            var detectedInfo = javas.FirstOrDefault(j => j.Path == autoDetected);
+                            if (detectedInfo != null) await JavaDetectedCallback(detectedInfo);
+                        }
+                    }
+                    else
+                    {
+                        throw new Exception(
+                            $"{info.LoaderType} 安装需要 Java 环境。未在 PATH 或 JAVA_HOME 中检测到 Java，请安装 Java 或前往设置手动配置。");
+                    }
+                }
+
+                if (DownloadJavaCompatibilityHandler != null)
+                {
+                    var resolved = await DownloadJavaCompatibilityHandler(javaPath, mcVersion);
+                    if (resolved == null) throw new OperationCanceledException("用户取消安装。");
+                    javaPath = resolved;
+                }
+            }
+
+            _mrpackInstall.JavaCompatibilityHandler = DownloadJavaCompatibilityHandler;
+
+            await _mrpackInstall.InstallMrpackAsync(
+                mrpackPath, instanceName, targetDir, _gameFolder.GameDir,
+                mcVersion, info.LoaderType, null, javaPath, settings,
+                progress, _notificationService.Show, ct);
+
+            _notificationService.Show($"整合包 {instanceName} 导入完成！", NotificationType.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            _notificationService.Show("导入已取消。", NotificationType.Info);
+            try { if (Directory.Exists(targetDir)) Directory.Delete(targetDir, true); }
+            catch { /* best effort */ }
+        }
+        catch (Exception ex)
+        {
+            _notificationService.WriteDiagnosticLog("导入 .mrpack 整合包失败", ex.ToString());
             _notificationService.Show($"导入失败：{ex.Message}", NotificationType.Error);
             try { if (Directory.Exists(targetDir)) Directory.Delete(targetDir, true); }
             catch { /* best effort */ }

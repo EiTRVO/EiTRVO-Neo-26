@@ -39,15 +39,8 @@
                          PreviewDragOver="LstManagedInstances_PreviewDragOver"
                          ItemsSource="{Binding Instances}"
                          ItemTemplate="{StaticResource ManageCardTemplate}"
+                         ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         Margin="24,4,24,16">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="HorizontalContentAlignment"
-                                    Value="Stretch"/>
-                            <Setter Property="Padding" Value="0"/>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                </ListBox>
+                         Margin="24,4,24,16"/>
             </Grid>
 </UserControl>

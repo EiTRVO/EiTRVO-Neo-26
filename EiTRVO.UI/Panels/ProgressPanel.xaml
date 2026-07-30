@@ -1,0 +1,288 @@
+<UserControl x:Class="EiTRVO.UI.Panels.ProgressPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+            <Grid >
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Border Grid.Row="0" Padding="24,16,24,10"
+                        BorderBrush="{DynamicResource SidebarBorder}"
+                        BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="进度"
+                                   FontSize="20" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="  查看下载与启动状态"
+                                   FontSize="14"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Body: sidebar + content -->
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="2"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left sidebar -->
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource SidebarBg}">
+                        <StackPanel Margin="6,8,6,6">
+                            <Button Tag="download"
+                                    Command="{Binding SelectTabCommand}"
+                                    CommandParameter="download">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedTab}" Value="download">
+                                                <Setter Property="Background" Value="{DynamicResource MenuActiveBg}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="下载进度" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                            </Button>
+                            <Button Tag="launch"
+                                    Command="{Binding SelectTabCommand}"
+                                    CommandParameter="launch">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource SidebarNavButton}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedTab}" Value="launch">
+                                                <Setter Property="Background" Value="{DynamicResource MenuActiveBg}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="运行日志" FontSize="13"
+                                           Foreground="{DynamicResource TextPrimary}"/>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Thin divider -->
+                    <Border Grid.Column="1"
+                            Background="{DynamicResource SidebarBorder}"/>
+
+                    <!-- Content area -->
+                    <Grid Grid.Column="2"
+                          Background="{DynamicResource WindowBg}">
+
+                        <!-- 下载进度 tab -->
+                        <Grid Margin="20,12"
+                              Visibility="{Binding IsDownloadTabVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 没有正在进行的下载 — 居中覆盖整个区域 -->
+                            <TextBlock Grid.RowSpan="3" Text="当前无下载任务"
+                                       FontSize="14"
+                                       Foreground="{DynamicResource TextMuted}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding HasActiveDownload, Converter={StaticResource BoolInvertConverter}}"/>
+
+                            <!-- 活动下载进度 — 顶部 -->
+                            <Border Grid.Row="0" Padding="16,14"
+                                    Visibility="{Binding DataContext.HasActiveDownload, RelativeSource={RelativeSource AncestorType=Grid}, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    DataContext="{Binding ActiveDownloadVm}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="280"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Row 0: 总体进度 -->
+                                    <TextBlock Grid.Row="0" Grid.Column="0"
+                                               Text="总体进度" FontSize="13"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimary}"
+                                               VerticalAlignment="Center"/>
+                                    <ProgressBar Grid.Row="0" Grid.Column="1"
+                                                 Height="8"
+                                                 VerticalAlignment="Center"
+                                                 Margin="8,0,8,0"
+                                                 Value="{Binding DownloadProgressValue}"
+                                                 IsIndeterminate="{Binding IsProgressIndeterminate}"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2"
+                                               Text="{Binding ProgressText}" FontSize="12"
+                                               Foreground="{DynamicResource TextSecondary}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding ProgressText}"/>
+
+                                    <!-- Row 1: 当前文件进度 -->
+                                    <TextBlock Grid.Row="1" Grid.Column="0"
+                                               Text="当前文件" FontSize="13"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimary}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,10,0,0"/>
+                                    <ProgressBar Grid.Row="1" Grid.Column="1"
+                                                 Height="8"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{DynamicResource AccentGreen}"
+                                                 Margin="8,10,8,0"
+                                                 Value="{Binding FileProgressValue}"
+                                                 IsIndeterminate="{Binding IsFileProgressIndeterminate}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="2"
+                                               Text="{Binding CurrentFileProgress}" FontSize="11"
+                                               Foreground="{DynamicResource TextSecondary}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,10,0,0"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding CurrentFileProgress}"/>
+
+                                    <!-- Row 2: 取消下载按钮 -->
+                                    <Button Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+                                            Content="取消下载"
+                                            Style="{StaticResource CardBtn}"
+                                            Foreground="{DynamicResource AccentRed}"
+                                            Height="26" FontSize="12" Padding="12,1"
+                                            Margin="0,10,0,0"
+                                            HorizontalAlignment="Center"
+                                            Command="{Binding CancelDownloadCommand}"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- 安装信息 + 轮播提示 — 下半部分 -->
+                            <StackPanel Grid.Row="2" Margin="0,16,0,8"
+                                        Visibility="{Binding HasActiveDownload, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <TextBlock FontSize="13" Foreground="{DynamicResource TextSecondary}"
+                                           TextWrapping="Wrap" Margin="16,0,0,0">
+                                    <Run Text="正在安装 Minecraft "/>
+                                    <Run Text="{Binding VersionDisplay}" FontWeight="SemiBold"/>
+                                    <Run Text=" "/>
+                                    <Run Text="{Binding LoaderDisplay}" FontWeight="SemiBold"/>
+                                </TextBlock>
+                                <TextBlock Text="{Binding CurrentTip}"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource TextMuted}"
+                                           Margin="16,6,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- 运行日志 tab -->
+                        <Grid Margin="20,12"
+                              Visibility="{Binding IsLaunchTabVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 顶部栏：状态 + 清空按钮 -->
+                            <Border Grid.Row="0" Padding="0,0,0,10"
+                                    BorderBrush="{DynamicResource SidebarBorder}"
+                                    BorderThickness="0,0,0,1">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse Width="8" Height="8" Margin="0,0,8,0"
+                                                 VerticalAlignment="Center">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Fill" Value="{DynamicResource TextMuted}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsGameRunning}" Value="True">
+                                                            <Setter Property="Fill" Value="{DynamicResource AccentGreen}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <TextBlock Text="{Binding GameStatusText}"
+                                                   FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button HorizontalAlignment="Right"
+                                            Content="清空日志"
+                                            Style="{StaticResource CardBtn}"
+                                            FontSize="11" Height="24" Padding="10,1"
+                                            Foreground="{DynamicResource AccentOrange}"
+                                            Command="{Binding ClearRuntimeLogCommand}"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- 启动进度条（仅启动时可见） -->
+                            <Border Grid.Row="1" Padding="0,8,0,8"
+                                    Visibility="{Binding IsLaunchProgressVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ProgressBar Grid.Column="0" Height="8"
+                                                 Minimum="0" Maximum="100"
+                                                 Value="{Binding LaunchProgressPercent}"
+                                                 Foreground="{DynamicResource AccentBlue}"
+                                                 Background="#2D2E40"
+                                                 BorderThickness="0"/>
+                                    <TextBlock Grid.Column="1" Margin="10,0,0,0"
+                                               VerticalAlignment="Center"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource AccentBlue}">
+                                        <Run Text="{Binding LaunchProgressPercent, StringFormat={}{0}%}"/>
+                                    </TextBlock>
+                                </Grid>
+                            </Border>
+
+                            <!-- 日志内容区 -->
+                            <ScrollViewer Grid.Row="2" x:Name="runtimeLogScroller"
+                                          VerticalScrollBarVisibility="Visible"
+                                          Margin="0,6,0,0">
+                                <ItemsControl ItemsSource="{Binding GameLogEntries}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="2,1,2,1">
+                                                <TextBlock Text="[" FontSize="12"
+                                                           Foreground="{DynamicResource TextMuted}"/>
+                                                <TextBlock Text="{Binding TimeDisplay, Mode=OneTime}"
+                                                           FontSize="12"
+                                                           Foreground="{DynamicResource TextMuted}"/>
+                                                <TextBlock Text="] " FontSize="12"
+                                                           Foreground="{DynamicResource TextMuted}"/>
+                                                <TextBlock Text="{Binding Message, Mode=OneTime}"
+                                                           FontSize="12"
+                                                           TextWrapping="NoWrap">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsStderr}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource AccentRed}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
+</UserControl>

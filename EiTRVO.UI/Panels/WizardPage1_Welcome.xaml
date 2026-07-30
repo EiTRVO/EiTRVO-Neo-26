@@ -1,0 +1,52 @@
+<UserControl x:Class="EiTRVO.UI.Panels.WizardPage1_Welcome"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid VerticalAlignment="Center" Margin="0,0,0,40">
+        <StackPanel MaxWidth="480">
+            <!-- Icon / branding -->
+            <TextBlock Text="EiTRVO Neo" FontSize="32" FontWeight="Bold"
+                       Foreground="{DynamicResource AccentBlue}"
+                       Margin="0,0,0,8"/>
+
+            <TextBlock Text="欢迎使用" FontSize="28" FontWeight="Light"
+                       Foreground="{DynamicResource TextPrimary}"
+                       Margin="0,0,0,24"/>
+
+            <TextBlock Text="如果您是首次使用 EiTRVO Neo，该向导将帮助您完成最基础的设置。"
+                       FontSize="14" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextSecondary}"
+                       Margin="0,0,0,16"
+                       LineHeight="24"/>
+
+            <TextBlock Text="整个过程仅需 1-2 分钟，您也可以随时返回之前的步骤进行修改。"
+                       FontSize="14" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextSecondary}"
+                       Margin="0,0,0,16"
+                       LineHeight="24"/>
+
+            <Border Background="{DynamicResource Surface}" CornerRadius="8"
+                    Padding="16,14" Margin="0,8,0,0">
+                <StackPanel>
+                    <TextBlock Text="向导包含以下步骤：" FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}"
+                               Margin="0,0,0,8"/>
+                    <TextBlock FontSize="12" Foreground="{DynamicResource TextSecondary}"
+                               LineHeight="22">
+                        <Run Text="1. "/><Run Text="安全设置 — 配置 EiTRVO Firewall 与自动备份" Foreground="{DynamicResource TextPrimary}"/>
+                        <LineBreak/>
+                        <Run Text="2. "/><Run Text="添加账号 — 登录微软账号或创建离线/第三方账号" Foreground="{DynamicResource TextPrimary}"/>
+                        <LineBreak/>
+                        <Run Text="3. "/><Run Text="准备就绪 — 确认设置并了解各项功能的位置" Foreground="{DynamicResource TextPrimary}"/>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="如果您知道如何操作，也可以点击右下角的「跳过」退出该向导。"
+                       FontSize="12"
+                       Foreground="{DynamicResource TextMuted}"
+                       Margin="0,16,0,0"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

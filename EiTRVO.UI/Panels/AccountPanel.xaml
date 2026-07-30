@@ -15,7 +15,7 @@
                     <TextBlock Text="账号管理" FontSize="18"
                                FontWeight="Bold"
                                Foreground="{DynamicResource TextPrimary}"/>
-                    <TextBlock Text="管理微软/Yggdrasil 账号登录"
+                    <TextBlock Text="管理微软 / 第三方账号 / 离线账号"
                                FontSize="12" Margin="0,4,0,0"
                                Foreground="{DynamicResource TextSecondary}"/>
                 </StackPanel>
@@ -29,21 +29,27 @@
                             Foreground="{DynamicResource AccentBlue}"
                             Command="{Binding AddMicrosoftCommand}"/>
                     <Button x:Name="btnAddYggdrasilAccount"
-                            Content="添加 Yggdrasil 账号"
+                            Content="添加第三方账号"
                             Style="{StaticResource CardBtn}"
                             Height="30" Padding="10,3" Margin="8,0,0,0"
                             Foreground="{DynamicResource AccentBlue}"
                             Command="{Binding ToggleYggdrasilFormCommand}"/>
+                    <Button x:Name="btnAddOfflineAccount"
+                            Content="添加离线账号"
+                            Style="{StaticResource CardBtn}"
+                            Height="30" Padding="10,3" Margin="8,0,0,0"
+                            Foreground="{DynamicResource AccentGreen}"
+                            Command="{Binding ToggleOfflineFormCommand}"/>
                 </StackPanel>
 
-                <!-- Yggdrasil auth form -->
+                <!-- 第三方账号登录表单 -->
                 <Border x:Name="pnlYggdrasilForm" Grid.Row="2"
                         Visibility="{Binding IsYggdrasilFormVisible, Converter={StaticResource BoolToVisibilityConverter}}"
                         Background="{DynamicResource Surface}"
                         CornerRadius="8" Padding="16"
                         Margin="24,4">
                     <StackPanel>
-                        <TextBlock Text="Yggdrasil 第三方验证"
+                        <TextBlock Text="第三方账号"
                                    FontWeight="Bold" FontSize="14"
                                    Foreground="{DynamicResource TextPrimary}"
                                    Margin="0,0,0,12"/>
@@ -84,6 +90,40 @@
                                     Style="{StaticResource DangerBtn}"
                                     Height="28" Padding="10,3" Margin="10,0,0,0"
                                     Command="{Binding CancelYggdrasilCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Offline account form -->
+                <Border x:Name="pnlOfflineForm" Grid.Row="2"
+                        Visibility="{Binding IsOfflineFormVisible, Converter={StaticResource BoolToVisibilityConverter}}"
+                        Background="{DynamicResource Surface}"
+                        CornerRadius="8" Padding="16"
+                        Margin="24,4">
+                    <StackPanel>
+                        <TextBlock Text="添加离线账号"
+                                   FontWeight="Bold" FontSize="14"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   Margin="0,0,0,12"/>
+                        <TextBlock Text="玩家名（3-16 位字母、数字或下划线）"
+                                   FontWeight="SemiBold"
+                                   FontSize="12" Margin="0,0,0,4"
+                                   Foreground="{DynamicResource TextSecondary}"/>
+                        <TextBox x:Name="txtOfflinePlayerName"
+                                 Height="32" Margin="0,0,0,12"
+                                 Text="{Binding OfflinePlayerName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Foreground="{DynamicResource TextPrimary}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="btnOfflineConfirm"
+                                    Content="添加"
+                                    Style="{StaticResource PrimaryBtn}"
+                                    Height="28" Padding="12,3"
+                                    Command="{Binding AddOfflineAccountCommand}"/>
+                            <Button x:Name="btnOfflineCancel"
+                                    Content="取消"
+                                    Style="{StaticResource DangerBtn}"
+                                    Height="28" Padding="10,3" Margin="10,0,0,0"
+                                    Command="{Binding CancelOfflineCommand}"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -141,15 +181,8 @@
                          SelectionMode="Single"
                          ItemsSource="{Binding Accounts}"
                          ItemTemplate="{StaticResource AccountCardTemplate}"
+                         ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         Margin="24,4,24,16">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="HorizontalContentAlignment"
-                                    Value="Stretch"/>
-                            <Setter Property="Padding" Value="0"/>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                </ListBox>
+                         Margin="24,4,24,16"/>
             </Grid>
 </UserControl>

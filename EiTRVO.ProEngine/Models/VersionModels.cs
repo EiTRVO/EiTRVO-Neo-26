@@ -93,6 +93,7 @@ public class Rule
 public class OsRule
 {
     [JsonPropertyName("name")] public string? Name { get; set; }
+    [JsonPropertyName("arch")] public string? Arch { get; set; }
 }
 
 public class AssetIndex

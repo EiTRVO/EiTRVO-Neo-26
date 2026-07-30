@@ -202,14 +202,9 @@
                                          SelectionMode="Single"
                                          ItemsSource="{Binding SaveLockEntries}"
                                          ItemTemplate="{StaticResource SaveLockCardTemplate}"
+                                         ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          Visibility="{Binding HasSaveLockEntries, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <ListBox.ItemContainerStyle>
-                                        <Style TargetType="ListBoxItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                            <Setter Property="Padding" Value="0"/>
-                                        </Style>
-                                    </ListBox.ItemContainerStyle>
                                 </ListBox>
                             </StackPanel>
                         </GroupBox>
@@ -238,14 +233,9 @@
                                          SelectionMode="Single"
                                          ItemsSource="{Binding SaveEntries}"
                                          ItemTemplate="{StaticResource SaveCardTemplate}"
+                                         ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          Visibility="{Binding HasSaves, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <ListBox.ItemContainerStyle>
-                                        <Style TargetType="ListBoxItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                            <Setter Property="Padding" Value="0"/>
-                                        </Style>
-                                    </ListBox.ItemContainerStyle>
                                 </ListBox>
                             </StackPanel>
                         </GroupBox>

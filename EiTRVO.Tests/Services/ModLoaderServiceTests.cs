@@ -235,7 +235,7 @@ public class ModLoaderServiceTests
             );
             var http = new HttpClient(handler);
 
-            await ModLoaderService.DownloadFileAsync(http, "http://example.com/file.jar", destFile);
+            await ModLoaderService.DownloadFileAsync(http, "https://maven.neoforged.net/releases/test.jar", destFile);
 
             Assert.IsTrue(File.Exists(destFile));
             Assert.AreEqual(3, handler.Requests.Count);
@@ -260,7 +260,7 @@ public class ModLoaderServiceTests
             var http = new HttpClient(handler);
 
             await Assert.ThrowsExceptionAsync<HttpRequestException>(
-                () => ModLoaderService.DownloadFileAsync(http, "http://example.com/file.jar", destFile));
+                () => ModLoaderService.DownloadFileAsync(http, "https://maven.neoforged.net/releases/test.jar", destFile));
 
             Assert.AreEqual(4, handler.Requests.Count); // initial + 3 retries
         }
@@ -279,7 +279,7 @@ public class ModLoaderServiceTests
             var http = new HttpClient(handler);
 
             await Assert.ThrowsExceptionAsync<HttpRequestException>(
-                () => ModLoaderService.DownloadFileAsync(http, "http://example.com/file.jar", destFile));
+                () => ModLoaderService.DownloadFileAsync(http, "https://maven.neoforged.net/releases/test.jar", destFile));
 
             Assert.AreEqual(1, handler.Requests.Count); // no retry
         }

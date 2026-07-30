@@ -62,16 +62,9 @@
                                  SelectionMode="Single"
                                  ItemsSource="{Binding Schematics}"
                                  ItemTemplate="{StaticResource SchematicCardTemplate}"
+                                 ItemContainerStyle="{StaticResource NoSelectListBoxItemStyle}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 Visibility="{Binding IsEmpty, Converter={StaticResource BoolInvertConverter}}">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="HorizontalContentAlignment"
-                                            Value="Stretch"/>
-                                    <Setter Property="Padding" Value="0"/>
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                        </ListBox>
+                                 Visibility="{Binding IsEmpty, Converter={StaticResource BoolInvertConverter}}"/>
                     </Grid>
                 </Grid>
             </Grid>

@@ -26,6 +26,32 @@ public partial class ModEntry : ObservableObject
     /// <summary>Display-friendly file name shown below the mod name.</summary>
     public string DisplayFileName => FileName;
 
+    // ---- Modrinth metadata (populated asynchronously after LoadMods) ----
+
+    /// <summary>Modrinth project title (e.g. "Just Enough Items"), empty if unresolved.</summary>
+    public string ModrinthTitle { get; set; } = "";
+
+    /// <summary>Modrinth project description, empty if unresolved.</summary>
+    public string ModrinthDescription { get; set; } = "";
+
+    /// <summary>Whether Modrinth metadata has been successfully resolved for this entry.</summary>
+    public bool HasModrinthMetadata => !string.IsNullOrEmpty(ModrinthTitle);
+
+    /// <summary>Display title — prefers Modrinth title, falls back to filename.</summary>
+    public string DisplayTitle => HasModrinthMetadata ? ModrinthTitle : Name;
+
+    /// <summary>Display subtitle — prefers Modrinth description, falls back to file path.</summary>
+    public string DisplaySubtitle => HasModrinthMetadata ? ModrinthDescription : FullPath;
+
+    /// <summary>Call after setting <see cref="ModrinthTitle"/> or <see cref="ModrinthDescription"/>
+    /// from external code to notify the UI of computed-property changes.</summary>
+    public void NotifyDisplayPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(HasModrinthMetadata));
+        OnPropertyChanged(nameof(DisplayTitle));
+        OnPropertyChanged(nameof(DisplaySubtitle));
+    }
+
     /// <summary>Create a ModEntry from a file path. Determines IsDisabled from the extension.</summary>
     public static ModEntry FromFile(string filePath)
     {

@@ -30,6 +30,14 @@ public interface IModrinthService
     /// <summary>Verify whether a file SHA-1 hash matches a known Modrinth mod file.</summary>
     Task<bool> VerifyFileByHashAsync(string sha1, CancellationToken ct = default);
 
+    /// <summary>Bulk lookup: SHA-1 hashes → VersionFileResponse (project_id, version_id) via <c>POST /version_files</c>.</summary>
+    Task<Dictionary<string, VersionFileResponse>> GetVersionFilesByHashesAsync(
+        IReadOnlyList<string> sha1s, CancellationToken ct = default);
+
+    /// <summary>Bulk lookup: project IDs → ModrinthProject (title, description) via <c>GET /projects?ids=</c>.</summary>
+    Task<List<ModrinthProject>> GetProjectsByIdsAsync(
+        IReadOnlyList<string> projectIds, CancellationToken ct = default);
+
     /// <summary>Search resource packs or shader packs (no loader filter).</summary>
     Task<ModrinthSearchResponse> SearchProjectsAsync(string query, string mcVersion,
         string projectType, int limit = 20, int offset = 0,

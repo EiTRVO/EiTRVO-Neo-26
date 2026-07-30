@@ -5,9 +5,42 @@ namespace EiTRVO.ProEngine.Helpers;
 
 public static class PlatformHelper
 {
+    /// <summary>
+    /// 从复合版本字符串（如 fabric-loader-0.19.3-1.14.4）中提取实际 Minecraft 版本号。
+    /// 取最后一个 "1.x" 或 "1.x.y" 匹配，因为 Fabric/Quilt 的 MC 版本位于字符串末尾。
+    /// 若无法匹配则返回空字符串。
+    /// </summary>
+    private static string ExtractMinecraftVersion(string versionId)
+    {
+        // 仅匹配作为独立段出现的 "1.x" 或 "1.x.y"
+        // — 前面必须是字符串开头或 "-"，避免误匹配 "26.1.0" 中的 "1.0"
+        var matches = System.Text.RegularExpressions.Regex.Matches(
+            versionId, @"(?:^|-)1\.(\d+)(\.\d+)?");
+
+        if (matches.Count == 0)
+            return "";
+
+        // 取最后一个匹配 — Fabric/Quilt 将 MC 版本放在末尾
+        // 去掉前导的 "-"（如果有）
+        string raw = matches[^1].Value;
+        return raw.StartsWith('-') ? raw[1..] : raw;
+    }
+
     public static int GetMinecraftRequiredJavaVersion(string mcVersion)
     {
-        if (mcVersion.StartsWith("1.17")) return 16;
+        // 预处理：从加载器复合版本字符串中提取真实 MC 版本号
+        string extracted = ExtractMinecraftVersion(mcVersion);
+        if (!string.IsNullOrEmpty(extracted))
+            mcVersion = extracted;
+
+        // 新版本号格式（24+, 25+, 26+ 等）
+        if (mcVersion.StartsWith("26."))
+        {
+            int minorEnd = mcVersion.IndexOf('.', 3);
+            string minorStr = minorEnd > 3 ? mcVersion.Substring(3, minorEnd - 3) : mcVersion.Substring(3);
+            if (int.TryParse(minorStr, out int minor26) && minor26 >= 1)
+                return 25;
+        }
 
         if (mcVersion.StartsWith("1."))
         {
@@ -18,7 +51,9 @@ public static class PlatformHelper
 
             if (int.TryParse(minorStr, out int minor))
             {
+                if (minor >= 21) return 21;
                 if (minor >= 18) return 17;
+                if (minor == 17) return 16;
                 return 8;
             }
         }

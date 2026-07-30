@@ -358,6 +358,69 @@ public class ModelSerializationTests
     }
 
     // ================================================================
+    // ModEntry — Modrinth metadata computed properties
+    // ================================================================
+
+    [TestMethod]
+    public void ModEntry_HasModrinthMetadata_NoTitle_ReturnsFalse()
+    {
+        var entry = new ModEntry { ModrinthTitle = "" };
+        Assert.IsFalse(entry.HasModrinthMetadata);
+    }
+
+    [TestMethod]
+    public void ModEntry_HasModrinthMetadata_TitleSet_ReturnsTrue()
+    {
+        var entry = new ModEntry { ModrinthTitle = "Just Enough Items" };
+        Assert.IsTrue(entry.HasModrinthMetadata);
+    }
+
+    [TestMethod]
+    public void ModEntry_DisplayTitle_FallsBackToName()
+    {
+        var entry = new ModEntry { Name = "jei-1.21", ModrinthTitle = "" };
+        Assert.AreEqual("jei-1.21", entry.DisplayTitle);
+    }
+
+    [TestMethod]
+    public void ModEntry_DisplayTitle_PrefersModrinthTitle()
+    {
+        var entry = new ModEntry { Name = "jei-1.21", ModrinthTitle = "Just Enough Items" };
+        Assert.AreEqual("Just Enough Items", entry.DisplayTitle);
+    }
+
+    [TestMethod]
+    public void ModEntry_DisplaySubtitle_FallsBackToFullPath()
+    {
+        var entry = new ModEntry { FullPath = @"C:\mods\jei-1.21.jar", ModrinthDescription = "" };
+        Assert.AreEqual(@"C:\mods\jei-1.21.jar", entry.DisplaySubtitle);
+    }
+
+    [TestMethod]
+    public void ModEntry_DisplaySubtitle_PrefersModrinthDescription()
+    {
+        var entry = new ModEntry
+        {
+            FullPath = @"C:\mods\jei-1.21.jar",
+            ModrinthTitle = "JEI",
+            ModrinthDescription = "View items and recipes"
+        };
+        Assert.AreEqual("View items and recipes", entry.DisplaySubtitle);
+    }
+
+    [TestMethod]
+    public void ModEntry_NotifyDisplayPropertiesChanged_RaisesAllProperties()
+    {
+        var entry = new ModEntry { ModrinthTitle = "JEI", ModrinthDescription = "Desc" };
+        var raised = new List<string>();
+        entry.PropertyChanged += (_, e) => raised.Add(e.PropertyName!);
+        entry.NotifyDisplayPropertiesChanged();
+        CollectionAssert.Contains(raised, nameof(ModEntry.HasModrinthMetadata));
+        CollectionAssert.Contains(raised, nameof(ModEntry.DisplayTitle));
+        CollectionAssert.Contains(raised, nameof(ModEntry.DisplaySubtitle));
+    }
+
+    // ================================================================
     // ResourcePackEntry — factory method FromPath
     // ================================================================
 
@@ -487,8 +550,53 @@ public class ModelSerializationTests
     }
 
     // ================================================================
-    // InstanceMeta — Serialization Round-Trip
+    // ModrinthModels — New model serialization
     // ================================================================
+
+    [TestMethod]
+    public void VersionFileResponse_Deserializes()
+    {
+        var json = @"{""id"":""vid-001"",""project_id"":""proj-abc"",""version_id"":""ver-xyz""}";
+        var result = JsonSerializer.Deserialize<VersionFileResponse>(json);
+        Assert.IsNotNull(result);
+        Assert.AreEqual("vid-001", result!.Id);
+        Assert.AreEqual("proj-abc", result.ProjectId);
+        Assert.AreEqual("ver-xyz", result.VersionId);
+    }
+
+    [TestMethod]
+    public void VersionFilesBulkResponse_Deserializes()
+    {
+        var json = @"{""a1b2c3"":{""id"":""vf1"",""project_id"":""p1"",""version_id"":""v1""},""d4e5f6"":{""id"":""vf2"",""project_id"":""p2"",""version_id"":""v2""}}";
+        var result = JsonSerializer.Deserialize<VersionFilesBulkResponse>(json);
+        Assert.IsNotNull(result);
+        Assert.AreEqual(2, result!.Count);
+        Assert.AreEqual("p1", result["a1b2c3"].ProjectId);
+        Assert.AreEqual("p2", result["d4e5f6"].ProjectId);
+    }
+
+    [TestMethod]
+    public void ModrinthProject_Deserializes()
+    {
+        var json = @"{""id"":""proj-001"",""title"":""Just Enough Items"",""description"":""View items and recipes"",""slug"":""jei"",""icon_url"":""https://cdn.modrinth.com/jei.png""}";
+        var result = JsonSerializer.Deserialize<ModrinthProject>(json);
+        Assert.IsNotNull(result);
+        Assert.AreEqual("proj-001", result!.Id);
+        Assert.AreEqual("Just Enough Items", result.Title);
+        Assert.AreEqual("View items and recipes", result.Description);
+        Assert.AreEqual("jei", result.Slug);
+        Assert.AreEqual("https://cdn.modrinth.com/jei.png", result.IconUrl);
+    }
+
+    [TestMethod]
+    public void ModrinthProject_Deserializes_NullIcon()
+    {
+        var json = @"{""id"":""proj-002"",""title"":""NoIcon Mod""}";
+        var result = JsonSerializer.Deserialize<ModrinthProject>(json);
+        Assert.IsNotNull(result);
+        Assert.IsNull(result!.IconUrl);
+        Assert.AreEqual("", result.Description); // omitted → default
+    }
 
     [TestMethod]
     public void InstanceMeta_RoundTrip()

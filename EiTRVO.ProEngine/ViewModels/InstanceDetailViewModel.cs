@@ -433,11 +433,16 @@ public partial class InstanceDetailViewModel : BaseViewModel
             saveFolderName = Path.GetFileNameWithoutExtension(zipPath);
         }
 
-        saveFolderName = Path.GetFileName(saveFolderName.Trim());
-        if (string.IsNullOrEmpty(saveFolderName))
-            saveFolderName = "unnamed";
+        // 安全消毒：Path.GetFileName 剥离目录分隔符，再用 SanitizeNameComponent 防止
+        // ".." / "." / 空值等边界情况。Path.GetFileName("..") 在 .NET 上返回 ".."，
+        // SanitizeNameComponent 会将其转为 "unnamed"。
+        saveFolderName = PathSafetyHelper.SanitizeNameComponent(saveFolderName);
 
         string destDir = Path.Combine(SavesFolder, saveFolderName);
+
+        // 深度防御：验证 destDir 安全落在 SavesFolder 内（CodeQL ZipSlip 合规）
+        if (!PathSafetyHelper.IsContained(destDir, SavesFolder))
+            return "存档文件名包含非法路径序列，已拒绝导入。";
         if (Directory.Exists(destDir))
         {
             int counter = 1;
@@ -460,8 +465,7 @@ public partial class InstanceDetailViewModel : BaseViewModel
             if (string.IsNullOrEmpty(relativePath)) continue;
 
             string destPath = Path.GetFullPath(Path.Combine(destDir, relativePath));
-            if (!destPath.StartsWith(Path.GetFullPath(destDir) + Path.DirectorySeparatorChar))
-                throw new InvalidDataException("路径穿越检测");
+            if (!PathSafetyHelper.IsContained(destPath, destDir))
                 throw new InvalidDataException("路径穿越检测");
 
             if (entry.FullName.EndsWith("/"))

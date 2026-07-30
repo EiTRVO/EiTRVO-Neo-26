@@ -4,9 +4,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using static EiTRVO.ProEngine.Helpers.Endpoints;
 
@@ -34,7 +36,7 @@ public class ModrinthService : IModrinthService
     };
 
     /// <summary>Represents a single file to download in the dependency chain.</summary>
-    private readonly record struct DownloadItem(string ProjectId, string Url, string DestPath, long FileSize);
+    private readonly record struct DownloadItem(string ProjectId, string Url, string DestPath, long FileSize, string? Sha1);
 
     public ModrinthService(HttpClient httpClient)
     {
@@ -49,7 +51,7 @@ public class ModrinthService : IModrinthService
         string modrinthLoader = MapLoaderToModrinth(loader);
         string facets = $"[[\"categories:{modrinthLoader}\"],[\"versions:{mcVersion}\"],[\"project_type:mod\"]]";
         string url = $"{ModrinthApi}/search?query={Uri.EscapeDataString(query)}" +
-                     $"&facets={Uri.EscapeUriString(facets)}" +
+                     $"&facets={Uri.EscapeDataString(facets)}" +
                      $"&limit={limit}&offset={offset}&index=relevance";
 
         var json = await _httpClient.GetStringAsync(url, ct);
@@ -64,8 +66,8 @@ public class ModrinthService : IModrinthService
     {
         string modrinthLoader = MapLoaderToModrinth(loader);
         string url = $"{ModrinthApi}/project/{Uri.EscapeDataString(projectId)}/version" +
-                     $"?loaders={Uri.EscapeUriString($"[\"{modrinthLoader}\"]")}" +
-                     $"&game_versions={Uri.EscapeUriString($"[\"{mcVersion}\"]")}";
+                     $"?loaders={Uri.EscapeDataString($"[\"{modrinthLoader}\"]")}" +
+                     $"&game_versions={Uri.EscapeDataString($"[\"{mcVersion}\"]")}";
 
         var json = await _httpClient.GetStringAsync(url, ct);
         var versions = JsonSerializer.Deserialize<ModrinthVersion[]>(json);
@@ -349,6 +351,7 @@ public class ModrinthService : IModrinthService
         // Phase 2: Download each file with count-aware progress
         var downloaded = new List<string>();
         int total = queue.Count;
+        int completed = 0;
 
         for (int i = 0; i < total; i++)
         {
@@ -356,13 +359,54 @@ public class ModrinthService : IModrinthService
 
             var item = queue[i];
             string fileName = Path.GetFileName(item.DestPath);
-            status?.Report($"下载({(i + 1)}/{total}): {fileName}");
 
-            // Signal file-count progress (overallCompleted/overallTotal in DownloadProgress)
+            // SHA-1 dedup: skip if file already exists with matching hash
+            if (File.Exists(item.DestPath))
+            {
+                bool hashMatch = false;
+                if (!string.IsNullOrEmpty(item.Sha1))
+                {
+                    try
+                    {
+                        string existingHash = ComputeSha1(item.DestPath);
+                        hashMatch = string.Equals(existingHash, item.Sha1, StringComparison.OrdinalIgnoreCase);
+                    }
+                    catch { /* re-download on compute failure */ }
+                }
+
+                if (hashMatch)
+                {
+                    completed++;
+                    status?.Report($"跳过({completed}/{total}): {fileName} (已存在)");
+                    fileProgress?.Report(DownloadProgress.FileProgress(
+                        fileName, item.FileSize, item.FileSize, 0, completed, total));
+                    downloaded.Add(fileName);
+                    continue;
+                }
+
+                // Hash mismatch or no SHA-1 — delete stale file before re-download
+                try { File.Delete(item.DestPath); } catch { }
+            }
+
+            status?.Report($"下载({completed + 1}/{total}): {fileName}");
             fileProgress?.Report(DownloadProgress.FileProgress(
-                fileName, 0, item.FileSize, 0, i + 1, total));
+                fileName, 0, item.FileSize, 0, completed + 1, total));
 
             await DownloadModAsync(item.Url, item.DestPath, fileProgress, ct);
+
+            // Post-download SHA-1 verification
+            if (!string.IsNullOrEmpty(item.Sha1))
+            {
+                string actualSha1 = ComputeSha1(item.DestPath);
+                if (!string.Equals(actualSha1, item.Sha1, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Delete(item.DestPath); } catch { }
+                    throw new InvalidDataException(
+                        $"前置模组 SHA-1 校验失败: {fileName}\n期望: {item.Sha1}\n实际: {actualSha1}");
+                }
+            }
+
+            completed++;
             downloaded.Add(fileName);
         }
 
@@ -391,8 +435,10 @@ public class ModrinthService : IModrinthService
         var file = version.Files.FirstOrDefault(f => f.Primary)
                    ?? version.Files.FirstOrDefault();
         if (file == null) throw new Exception("版本中没有可下载的文件。");
-        string destPath = Path.Combine(modsFolder, file.Filename);
-        queue.Add(new DownloadItem(projectId, file.Url, destPath, file.Size));
+        string safeName = Path.GetFileName(file.Filename);
+        string destPath = Path.Combine(modsFolder, safeName);
+        PathSafetyHelper.ValidateContained(destPath, modsFolder);
+        queue.Add(new DownloadItem(projectId, file.Url, destPath, file.Size, file.Hashes?.Sha1));
 
         foreach (var dep in version.Dependencies)
         {
@@ -412,11 +458,152 @@ public class ModrinthService : IModrinthService
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, ModrinthVersionFile(sha1));
-            using var response = await _httpClient.SendAsync(request, ct);
-            return response.IsSuccessStatusCode;
+            var result = await GetVersionFilesByHashesAsync(new[] { sha1 }, ct);
+            return result.ContainsKey(sha1);
         }
         catch { return false; }
+    }
+
+    /// <summary>Bulk SHA-1 → VersionFileResponse via <c>POST /version_files</c>.
+    /// Falls back to individual <c>GET /version_file/{hash}</c> lookups if the bulk
+    /// endpoint returns an error (e.g. 400 on malformed input).</summary>
+    public async Task<Dictionary<string, VersionFileResponse>> GetVersionFilesByHashesAsync(
+        IReadOnlyList<string> sha1s, CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, VersionFileResponse>(StringComparer.OrdinalIgnoreCase);
+        if (sha1s.Count == 0) return result;
+
+        // Filter out invalid hashes (must be 40-char hex)
+        var valid = sha1s.Where(s => s.Length == 40 && s.All(c =>
+            c is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F')).ToList();
+        if (valid.Count == 0) return result;
+
+        try
+        {
+            var body = new { hashes = valid, algorithm = "sha1" };
+            var json = JsonSerializer.Serialize(body);
+            using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            using var request = new HttpRequestMessage(HttpMethod.Post, ModrinthVersionFiles) { Content = content };
+
+            using var response = await _httpClient.SendAsync(request, ct);
+            if (response.IsSuccessStatusCode)
+            {
+                var bulk = await JsonSerializer.DeserializeAsync<VersionFilesBulkResponse>(
+                    await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+                if (bulk != null)
+                {
+                    foreach (var kv in bulk)
+                        result[kv.Key] = kv.Value;
+                }
+                return result;
+            }
+
+            // If bulk returned non-success, log and fall through to individual lookups
+            Trace.TraceWarning(
+                $"Modrinth bulk version_files returned {(int)response.StatusCode}, " +
+                $"falling back to individual lookups ({valid.Count} hashes)");
+        }
+        catch (HttpRequestException)
+        {
+            // Network error — fall through to individual lookups
+            Trace.TraceWarning(
+                $"Modrinth bulk version_files request failed, " +
+                $"falling back to individual lookups ({valid.Count} hashes)");
+        }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Timeout — fall through to individual lookups
+            Trace.TraceWarning(
+                $"Modrinth bulk version_files timed out, " +
+                $"falling back to individual lookups ({valid.Count} hashes)");
+        }
+
+        // Fallback: individual GET /version_file/{sha1} for each hash
+        foreach (var sha1 in valid)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var vfr = await LookupVersionFileByHashAsync(sha1, ct);
+                if (vfr != null)
+                    result[sha1] = vfr;
+            }
+            catch
+            {
+                // Best-effort: skip individual failures
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Individual SHA-1 lookup via <c>GET /version_file/{sha1}</c>.</summary>
+    private async Task<VersionFileResponse?> LookupVersionFileByHashAsync(
+        string sha1, CancellationToken ct)
+    {
+        try
+        {
+            string url = $"{ModrinthApi}/version_file/{sha1}?algorithm=sha1";
+            var json = await _httpClient.GetStringAsync(url, ct);
+            return JsonSerializer.Deserialize<VersionFileResponse>(json);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Bulk project IDs → ModrinthProject via <c>GET /projects?ids=</c>.</summary>
+    public async Task<List<ModrinthProject>> GetProjectsByIdsAsync(
+        IReadOnlyList<string> projectIds, CancellationToken ct = default)
+    {
+        if (projectIds.Count == 0) return new List<ModrinthProject>();
+
+        // Modrinth allows up to ~100 ids in one request (URL length limit ~8000 chars).
+        // We deduplicate and batch if needed.
+        var unique = new HashSet<string>(projectIds, StringComparer.OrdinalIgnoreCase);
+        var allProjects = new List<ModrinthProject>();
+
+        // Process in batches of 100 to stay under URL length limits
+        var batch = new List<string>(100);
+        foreach (var id in unique)
+        {
+            batch.Add(id);
+            if (batch.Count >= 100)
+            {
+                var batchResult = await GetProjectsBatchAsync(batch, ct);
+                allProjects.AddRange(batchResult);
+                batch.Clear();
+            }
+        }
+        if (batch.Count > 0)
+        {
+            var batchResult = await GetProjectsBatchAsync(batch, ct);
+            allProjects.AddRange(batchResult);
+        }
+
+        return allProjects;
+    }
+
+    private async Task<List<ModrinthProject>> GetProjectsBatchAsync(
+        List<string> ids, CancellationToken ct)
+    {
+        // Build JSON-array query string: ?ids=["id1","id2"]
+        // %22 = " (JSON string delimiter), %2C = , (array separator)
+        string idsParam = string.Join("%2C", ids.Select(id =>
+            $"%22{Uri.EscapeDataString(id)}%22"));
+        string url = $"https://api.modrinth.com/v2/projects?ids=[{idsParam}]";
+
+        try
+        {
+            var json = await _httpClient.GetStringAsync(url, ct);
+            return JsonSerializer.Deserialize<List<ModrinthProject>>(json) ?? new List<ModrinthProject>();
+        }
+        catch (HttpRequestException ex)
+        {
+            Trace.TraceWarning($"Modrinth projects batch lookup failed ({ids.Count} IDs): {ex.Message}");
+            return new List<ModrinthProject>();
+        }
     }
 
     private static void FinalizeDownload(string tmpPath, string destinationPath)
@@ -455,6 +642,14 @@ public class ModrinthService : IModrinthService
         catch { /* best effort */ }
     }
 
+    /// <summary>计算文件的 SHA-1 哈希值（小写十六进制）。</summary>
+    private static string ComputeSha1(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        byte[] hash = SHA1.HashData(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
     // ==================== Resource/Shader Pack API ====================
 
     public async Task<ModrinthSearchResponse> SearchProjectsAsync(string query, string mcVersion,
@@ -462,7 +657,7 @@ public class ModrinthService : IModrinthService
     {
         string facets = $"[[\"versions:{mcVersion}\"],[\"project_type:{projectType}\"]]";
         string url = $"{ModrinthApi}/search?query={Uri.EscapeDataString(query)}" +
-                     $"&facets={Uri.EscapeUriString(facets)}" +
+                     $"&facets={Uri.EscapeDataString(facets)}" +
                      $"&limit={limit}&offset={offset}&index=relevance";
 
         var json = await _httpClient.GetStringAsync(url, ct);
@@ -474,7 +669,7 @@ public class ModrinthService : IModrinthService
         CancellationToken ct = default)
     {
         string url = $"{ModrinthApi}/project/{Uri.EscapeDataString(projectId)}/version" +
-                     $"?game_versions={Uri.EscapeUriString($"[\"{mcVersion}\"]")}";
+                     $"?game_versions={Uri.EscapeDataString($"[\"{mcVersion}\"]")}";
 
         var json = await _httpClient.GetStringAsync(url, ct);
         var versions = JsonSerializer.Deserialize<ModrinthVersion[]>(json);
@@ -502,7 +697,7 @@ public class ModrinthService : IModrinthService
             facets = $"[[\"versions:{mcVersion}\"],[\"project_type:modpack\"]]";
         }
         string url = $"{ModrinthApi}/search?query={Uri.EscapeDataString(query)}" +
-                     $"&facets={Uri.EscapeUriString(facets)}" +
+                     $"&facets={Uri.EscapeDataString(facets)}" +
                      $"&limit={limit}&offset={offset}&index=relevance";
 
         var json = await _httpClient.GetStringAsync(url, ct);
@@ -514,7 +709,7 @@ public class ModrinthService : IModrinthService
         CancellationToken ct = default)
     {
         string url = $"{ModrinthApi}/project/{Uri.EscapeDataString(projectId)}/version" +
-                     $"?game_versions={Uri.EscapeUriString($"[\"{mcVersion}\"]")}";
+                     $"?game_versions={Uri.EscapeDataString($"[\"{mcVersion}\"]")}";
 
         var json = await _httpClient.GetStringAsync(url, ct);
         var versions = JsonSerializer.Deserialize<ModrinthVersion[]>(json);
@@ -531,7 +726,7 @@ public class ModrinthService : IModrinthService
         CancellationToken ct = default)
     {
         string url = $"{ModrinthApi}/project/{Uri.EscapeDataString(projectId)}/version" +
-                     $"?ids={Uri.EscapeUriString($"[\"{versionId}\"]")}";
+                     $"?ids={Uri.EscapeDataString($"[\"{versionId}\"]")}";
 
         var json = await _httpClient.GetStringAsync(url, ct);
         var versions = JsonSerializer.Deserialize<ModrinthVersion[]>(json);

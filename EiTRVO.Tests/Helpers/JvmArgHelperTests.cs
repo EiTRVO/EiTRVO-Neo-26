@@ -114,4 +114,47 @@ public class JvmArgHelperTests
     {
         Assert.IsFalse(JvmArgHelper.IsMainClassBlocked(null));
     }
+
+    // ==================== B4: arch 规则测试 ====================
+
+    [TestMethod]
+    public void IsRuleAllowed_ArchX86_On64Bit_NotApplied()
+    {
+        // On x64, an allow rule with arch=x86 should NOT apply
+        var rules = new List<EiTRVO.ProEngine.Models.Rule>
+        {
+            new() { Action = "allow", Os = new EiTRVO.ProEngine.Models.OsRule { Arch = "x86" } }
+        };
+        bool result = JvmArgHelper.IsRuleAllowed(rules);
+        // On 64-bit OS the rule should not match → allowed stays false
+        if (Environment.Is64BitOperatingSystem)
+            Assert.IsFalse(result, "x86 arch rule should not apply on 64-bit OS");
+        else
+            Assert.IsTrue(result, "x86 arch rule should apply on 32-bit OS");
+    }
+
+    [TestMethod]
+    public void IsRuleAllowed_ArchX86_WithOsName_Windows()
+    {
+        // "allow on windows&x86" → only applies on 32-bit Windows
+        var rules = new List<EiTRVO.ProEngine.Models.Rule>
+        {
+            new() { Action = "allow", Os = new EiTRVO.ProEngine.Models.OsRule { Name = "windows", Arch = "x86" } }
+        };
+        bool result = JvmArgHelper.IsRuleAllowed(rules);
+        bool expected = OperatingSystem.IsWindows() && !Environment.Is64BitOperatingSystem;
+        Assert.AreEqual(expected, result);
+    }
+
+    [TestMethod]
+    public void IsRuleAllowed_ArchUnknown_DefaultsToAllow()
+    {
+        // Unknown arch values should be treated as matching (same as OS name _ => true)
+        var rules = new List<EiTRVO.ProEngine.Models.Rule>
+        {
+            new() { Action = "allow", Os = new EiTRVO.ProEngine.Models.OsRule { Arch = "arm64" } }
+        };
+        bool result = JvmArgHelper.IsRuleAllowed(rules);
+        Assert.IsTrue(result, "Unknown arch should default to matching");
+    }
 }

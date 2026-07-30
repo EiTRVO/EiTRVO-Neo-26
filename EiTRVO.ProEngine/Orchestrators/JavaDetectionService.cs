@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 
 namespace EiTRVO.ProEngine.Orchestrators;
@@ -30,6 +31,31 @@ public class JavaDetectionService
         return javas;
     }
 
+    /// <summary>
+    /// 按需解析 Java 路径：若 settings 中已有则直接返回，否则运行检测。
+    /// 当 mcVersion 已知时，优先选择版本兼容的 Java（参考启动流程的版本分类逻辑）。
+    /// </summary>
+    public async Task<string?> ResolveJavaPathAsync(LauncherSettings? settings, string? mcVersion = null)
+    {
+        if (settings != null && !string.IsNullOrEmpty(settings.JavaPath))
+            return settings.JavaPath;
+
+        var javas = await DetectAsync();
+        if (javas.Count == 0) return null;
+
+        // 若已知 MC 版本，参照 PlatformHelper 的版本分类优先选择兼容的 Java
+        if (!string.IsNullOrEmpty(mcVersion))
+        {
+            int required = PlatformHelper.GetMinecraftRequiredJavaVersion(mcVersion);
+            var compatible = javas.FirstOrDefault(j => j.MajorVersion >= required);
+            if (compatible != null) return compatible.Path;
+            // 无完全兼容版本 → 回退到最新版（后续由 DownloadJavaCompatibilityHandler 弹窗提示）
+        }
+
+        // 默认返回最新版本（MajorVersion 最高），而非随机第一个
+        return javas.OrderByDescending(j => j.MajorVersion).First().Path;
+    }
+
     private static List<string> FindJavaExecutables()
     {
         var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -48,6 +74,18 @@ public class JavaDetectionService
                     if (File.Exists(fullPath)) results.Add(fullPath);
                 }
             }
+
+        // Scan JAVA_HOME environment variable
+        string? javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
+        if (!string.IsNullOrWhiteSpace(javaHome))
+        {
+            foreach (string exeName in exeNames)
+            {
+                string fullPath = Path.Combine(javaHome.Trim(), "bin", exeName);
+                if (File.Exists(fullPath)) results.Add(fullPath);
+            }
+        }
+
         if (isWindows)
         {
             string[] baseDirs = { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) };
@@ -109,7 +147,7 @@ public class JavaDetectionService
         catch { }
     }
 
-    internal static async Task<(string full, string shortVer, int major)?> GetJavaVersionInfoAsync(string javaPath)
+    public static async Task<(string full, string shortVer, int major)?> GetJavaVersionInfoAsync(string javaPath)
     {
         try
         {

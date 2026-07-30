@@ -21,10 +21,12 @@ public partial class ManagePanel
     {
         if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files)
         {
-            var zipFile = files.FirstOrDefault(f => f.EndsWith(".zip", System.StringComparison.OrdinalIgnoreCase));
-            if (zipFile != null && DataContext is ManageViewModel vm)
+            var packFile = files.FirstOrDefault(f =>
+                f.EndsWith(".zip", System.StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".mrpack", System.StringComparison.OrdinalIgnoreCase));
+            if (packFile != null && DataContext is ManageViewModel vm)
             {
-                try { await vm.ImportPackAsync(zipFile); }
+                try { await vm.ImportPackAsync(packFile); }
                 catch (Exception ex) { System.Diagnostics.Trace.WriteLine($"导入整合包失败: {ex}"); }
             }
         }
