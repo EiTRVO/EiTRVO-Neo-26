@@ -465,7 +465,13 @@ public partial class InstanceDetailViewModel : BaseViewModel
             if (string.IsNullOrEmpty(relativePath)) continue;
 
             string destPath = Path.GetFullPath(Path.Combine(destDir, relativePath));
-            if (!PathSafetyHelper.IsContained(destPath, destDir))
+
+            // 1. NTFS 重解析点防御（符号链接 / Junction 穿越）
+            PathSafetyHelper.ValidateNoReparsePoint(destDir, destPath);
+
+            // 2. ZipSlip 路径穿越防御：规范化后验证 destPath 位于 destDir 内
+            string fullDestDirPath = Path.GetFullPath(destDir + Path.DirectorySeparatorChar);
+            if (!destPath.StartsWith(fullDestDirPath, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("路径穿越检测");
 
             if (entry.FullName.EndsWith("/"))

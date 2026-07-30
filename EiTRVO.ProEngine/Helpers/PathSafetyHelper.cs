@@ -51,6 +51,29 @@ public static class PathSafetyHelper
     }
 
     /// <summary>
+    /// 验证目标路径中不包含 NTFS 重解析点（符号链接 / Junction / 挂载点）。
+    /// 若 destPath 不在 baseDir 内则直接返回——由调用方 ZipSlip 检查负责拒绝。
+    /// </summary>
+    /// <param name="baseDir">基准目录</param>
+    /// <param name="destPath">待检查的目标路径</param>
+    /// <exception cref="InvalidDataException">路径包含重解析点，拒绝写入</exception>
+    public static void ValidateNoReparsePoint(string baseDir, string destPath)
+    {
+        string fullBase = Path.GetFullPath(baseDir).TrimEnd(Path.DirectorySeparatorChar);
+        string fullDest = Path.GetFullPath(destPath);
+
+        // 仅当路径已确认在 baseDir 内时才进行重解析点遍历检查
+        if (!(fullDest.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(fullDest, fullBase, StringComparison.OrdinalIgnoreCase)))
+        {
+            return; // 路径逃逸由后续 ZipSlip 检查处理
+        }
+
+        if (HasReparsePointInPath(fullBase, fullDest))
+            throw new InvalidDataException($"路径包含符号链接或 Junction，已拒绝。");
+    }
+
+    /// <summary>
     /// 检查目标路径是否安全地落在基准目录内（不抛异常版本）。
     /// 用于需要静默跳过而非抛出异常的场景。
     /// </summary>
