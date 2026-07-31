@@ -41,6 +41,9 @@ public interface IGameProcessSecurityService : IDisposable
     /// <summary>停止 Layer 4 + Layer 5 高级监控并释放资源。</summary>
     void StopAdvancedMonitoring();
 
+    /// <summary>关闭 Job Object 句柄，触发 KILL_ON_JOB_CLOSE 终止游戏进程树。</summary>
+    void TerminateJobProcesses();
+
     /// <summary>停止监控并释放 WMI 资源</summary>
     void StopMonitoring();
 }

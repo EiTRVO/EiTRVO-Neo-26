@@ -62,6 +62,38 @@ public static class PlatformHelper
     }
 
     /// <summary>
+    /// 返回指定 MC 版本兼容的最高 Java 主版本号。
+    /// 1.12.2 及以下使用 LWJGL 2.x，Java 9+ 移除了其依赖的 API，因此硬上限为 8。
+    /// </summary>
+    public static int GetMaxRecommendedJavaVersion(string mcVersion)
+    {
+        string extracted = ExtractMinecraftVersion(mcVersion);
+        if (!string.IsNullOrEmpty(extracted))
+            mcVersion = extracted;
+
+        // 新版本号格式（24+, 25+, 26+）
+        if (mcVersion.StartsWith("26.") || mcVersion.StartsWith("25.") || mcVersion.StartsWith("24."))
+            return int.MaxValue;
+
+        if (mcVersion.StartsWith("1."))
+        {
+            int minorEnd = mcVersion.IndexOf('.', 2);
+            string minorStr = minorEnd > 2
+                ? mcVersion.Substring(2, minorEnd - 2)
+                : mcVersion.Substring(2);
+
+            if (int.TryParse(minorStr, out int minor))
+            {
+                if (minor >= 21) return int.MaxValue;   // 最新版，无上限
+                if (minor >= 13) return 21;              // LWJGL 3.x，21 兼容
+                return 8;                                // 1.12.2 及以下：LWJGL 2.x，硬上限 Java 8
+            }
+        }
+
+        return int.MaxValue;
+    }
+
+    /// <summary>
     /// Gets the real base directory of the application, accounting for single-file publishing.
     /// In single-file mode, AppContext.BaseDirectory points to the bundle extraction temp directory;
     /// Environment.ProcessPath gives the actual exe location. When running via "dotnet run",

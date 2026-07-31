@@ -51,6 +51,7 @@ public class LaunchOrchestrator
     private string? _lastLaunchGameDir;
     private int _lastLaunchMemory;
     private List<string> _lastLaunchArgs = new();
+    private bool _firewallTripped; // Firewall 熔断标志：true 时跳过启动失败弹框
 
     // 存档锁：活跃解密密钥 (saveName → (K, lockMode))
     private readonly Dictionary<string, (byte[] Key, SaveLockMode Mode)> _activeSaveKeys = new();
@@ -142,8 +143,24 @@ public class LaunchOrchestrator
 
     public void KillGame()
     {
-        try { _gameProcess?.Kill(); } catch { }
-        _gameCts?.Cancel();
+        // 1. 关 Job Object → KILL_ON_JOB_CLOSE 终止游戏 + 所有子进程
+        _gameSecurity?.TerminateJobProcesses();
+
+        // 2. 兜底：直接 Kill 游戏进程（Job 可能未覆盖所有场景）
+        if (_gameProcess != null)
+        {
+            try { _gameProcess.Kill(); } catch { }
+            _gameProcess.Dispose();
+            _gameProcess = null;
+        }
+
+        // 3. 取消 WaitForExitAsync 等待
+        if (_gameCts != null)
+        {
+            _gameCts.Cancel();
+            _gameCts.Dispose();
+            _gameCts = null;
+        }
     }
 
     public void DisposeGameResources()
@@ -840,10 +857,13 @@ public class LaunchOrchestrator
 
     private async Task RunGameProcessAsync(JavaInfo javaInfo, List<string> args, string? workingDirectory = null)
     {
-        // Clean up any previous process before starting a new one
-        if (_gameCts != null) { _gameCts.Cancel(); _gameCts.Dispose(); }
-        if (_gameProcess != null) { try { _gameProcess.Kill(); } catch { } _gameProcess.Dispose(); }
+        // Clean up any previous launch before starting a new one
+        _gameSecurity?.StopAdvancedMonitoring();
+        _gameSecurity?.StopMonitoring();
+        if (_gameCts != null) { _gameCts.Cancel(); _gameCts.Dispose(); _gameCts = null; }
+        if (_gameProcess != null) { try { _gameProcess.Kill(); } catch { } _gameProcess.Dispose(); _gameProcess = null; }
 
+        _firewallTripped = false;
         bool firewallEnabled = FirewallEnabledProvider?.Invoke() ?? false;
         string workDir = workingDirectory ?? _gameFolder.GameDir;
 
@@ -883,8 +903,12 @@ public class LaunchOrchestrator
         // === EiTRVO Firewall Layer 3 (WMI 监控) ===
         if (_gameSecurity != null && firewallEnabled)
         {
+            _notificationService.AppendLog(
+                "EiTRVO Firewall 已启用（标准防御），子进程监控已启动。",
+                NotificationType.Info);
             _gameSecurity.StartMonitoring(_gameProcess, (processName, pid, commandLine) =>
             {
+                _firewallTripped = true;
                 var cmdInfo = commandLine != null ? $"\n命令行：{commandLine}" : "";
                 _notificationService.Show(
                     $"EiTRVO Firewall 已阻止危险程序调用\n\n" +
@@ -905,6 +929,9 @@ public class LaunchOrchestrator
         bool advancedDefense = firewallEnabled && (AdvancedDefenseEnabledProvider?.Invoke() ?? false);
         if (_gameSecurity != null && advancedDefense)
         {
+            _notificationService.AppendLog(
+                "EiTRVO Firewall 高级防御已启用，文件/模块/网络监控已启动。",
+                NotificationType.Info);
             string javaHome = Path.GetDirectoryName(javaInfo.Path) ?? javaInfo.Path;
             _gameSecurity.StartAdvancedMonitoring(
                 _gameProcess, workDir, javaHome,
@@ -975,12 +1002,25 @@ public class LaunchOrchestrator
             });
 
             var gameStartTime = DateTimeOffset.UtcNow;
-            await _gameProcess.WaitForExitAsync(token);
+            try
+            {
+                await _gameProcess.WaitForExitAsync(token);
+            }
+            catch (OperationCanceledException) when (_firewallTripped)
+            {
+                // Firewall 熔断触发的 KillGame → CTS Cancel：静默处理，不弹启动失败框
+                GameOutputReceived?.Invoke(
+                    "[EiTRVO] Firewall 熔断已触发，游戏进程及子进程已由 Job Object 回收。",
+                    false);
+            }
 
-            GameOutputReceived?.Invoke(
-                $"[EiTRVO] 游戏已退出 (退出码: {_gameProcess.ExitCode})", false);
+            if (!_firewallTripped && _gameProcess != null)
+            {
+                GameOutputReceived?.Invoke(
+                    $"[EiTRVO] 游戏已退出 (退出码: {_gameProcess.ExitCode})", false);
+            }
 
-            if (_gameProcess.ExitCode != 0)
+            if (!_firewallTripped && _gameProcess != null && _gameProcess.ExitCode != 0)
             {
                 // Collect last lines from ring buffer
                 var lastLines = new System.Text.StringBuilder();
@@ -1008,6 +1048,8 @@ public class LaunchOrchestrator
         finally
         {
             handle?.Dispose();
+            // handle.Dispose() 会 dispose _gameProcess（同引用），需要置 null 防止 WPF 绑定访问已 dispose 对象
+            _gameProcess = null;
             // Notify listeners that the game process has exited
             GameRunningChanged?.Invoke(false);
         }

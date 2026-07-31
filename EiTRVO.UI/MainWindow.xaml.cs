@@ -198,7 +198,11 @@ namespace EiTRVO.UI
             pnlResourceDownload.DataContext = _resourceDownloadVm;
 
             // Wire ViewModel events
-            _homeVm.LaunchFailed += (msg, logPath) => _dispatcher.Invoke(() => ShowFailureDialog(msg, logPath));
+            _homeVm.LaunchFailed += (msg, logPath) => _dispatcher.Invoke(() =>
+            {
+                _progressVm.CompleteLaunchProgress();
+                ShowFailureDialog(msg, logPath);
+            });
 
             // 启动开始时：清空旧日志 + 跳转进度页 + 启动进度条
             _homeVm.LaunchStarted += (instanceName) => _dispatcher.Invoke(() =>
@@ -599,8 +603,17 @@ namespace EiTRVO.UI
             _homeVm.JavaCompatibilityHandler = async (JavaInfo currentJava, GameInstance instance) =>
             {
                 int required = PlatformHelper.GetMinecraftRequiredJavaVersion(instance.BaseVersion);
+                int maxRecommended = PlatformHelper.GetMaxRecommendedJavaVersion(instance.BaseVersion);
+
+                bool tooLow = currentJava.MajorVersion < required;
+                bool tooHigh = currentJava.MajorVersion > maxRecommended;
+
+                string rangeText = tooLow
+                    ? $"（需要 Java {required} 或更高版本）"
+                    : $"（Minecraft {instance.VersionId} 仅兼容 Java ≤ {maxRecommended}，当前使用的 Java {currentJava.MajorVersion} 太新，会导致崩溃）";
+
                 string msg = $"当前选择的 Java {currentJava.ShortVersion}（主版本 {currentJava.MajorVersion}）" +
-                             $"无法启动 Minecraft {instance.VersionId}（需要 Java {required} 或更高版本）。\n\n" +
+                             $"无法启动 Minecraft {instance.VersionId}。\n\n{rangeText}\n\n" +
                              "是否由启动器自动选择合适的 Java 版本？\n\n" +
                              "选「否」将取消本次启动，您可前往设置页面自行选择。";
 
@@ -627,7 +640,10 @@ namespace EiTRVO.UI
 
                 foreach (var candidate in javaList)
                 {
+                    // 跳过太低的
                     if (candidate.MajorVersion < required) continue;
+                    // 对于 "太高" 的情况，也跳过太高的
+                    if (tooHigh && candidate.MajorVersion > maxRecommended) continue;
 
                     // 二次验证：运行 java -version 确认有效性和安全性
                     var verify = await JavaDetectionService.GetJavaVersionInfoAsync(candidate.Path);
@@ -646,8 +662,11 @@ namespace EiTRVO.UI
                     return candidate;
                 }
 
+                string failMsg = tooLow
+                    ? $"未找到兼容 Java {required}+ 的版本"
+                    : $"未找到兼容 Java ≤ {maxRecommended} 的版本";
                 _notificationService.Show(
-                    $"未找到兼容 Java {required}+ 的版本，请前往设置手动选择。", NotificationType.Error);
+                    $"{failMsg}，请前往设置手动选择。", NotificationType.Error);
                 return null;
             };
 

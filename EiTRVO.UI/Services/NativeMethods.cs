@@ -66,7 +66,7 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
 
-    // Toolhelp32 — DLL enumeration (Layer 5a)
+    // Toolhelp32 — DLL enumeration (Layer 5a) + process tree (Layer 3 fallback)
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr CreateToolhelp32Snapshot(
         uint dwFlags,
@@ -77,6 +77,12 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern bool Module32Next(IntPtr hSnapshot, ref MODULEENTRY32 lpme);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool Process32First(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool Process32Next(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool InitializeProcThreadAttributeList(
@@ -185,6 +191,7 @@ internal static class NativeMethods
     // Toolhelp32 flags
     public const uint TH32CS_SNAPMODULE = 0x00000008;
     public const uint TH32CS_SNAPMODULE32 = 0x00000010;
+    public const uint TH32CS_SNAPPROCESS = 0x00000002;
 
     // TCP table constants
     public const uint AF_INET = 2;
@@ -321,6 +328,22 @@ internal static class NativeMethods
         public string szModule;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
         public string szExePath;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct PROCESSENTRY32
+    {
+        public int dwSize;
+        public int cntUsage;
+        public int th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public int th32ModuleID;
+        public int cntThreads;
+        public int th32ParentProcessID;
+        public int pcPriClassBase;
+        public int dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szExeFile;
     }
 
     // ==================== TCP table structs ====================

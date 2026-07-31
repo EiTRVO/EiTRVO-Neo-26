@@ -43,6 +43,7 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
 
     private SafeFileHandle? _jobHandle;
     private ManagementEventWatcher? _watcher;
+    private System.Threading.Timer? _procTreeTimer; // Layer 3 进程树快照轮询（WMI 兜底）
     private volatile int _parentPid;
     private volatile Action<string, int, string?>? _onThreat;
 
@@ -346,8 +347,10 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
             process = Process.GetProcessById(pid);
 
             // ── 9. 构建 StreamReader ──
-            var stdoutStream = new FileStream(stdoutRead, FileAccess.Read, bufferSize: 4096, isAsync: true);
-            var stderrStream = new FileStream(stderrRead, FileAccess.Read, bufferSize: 4096, isAsync: true);
+            // 匿名管道 (CreatePipe) 不支持 Overlapped I/O，必须用同步模式。
+            // StreamReader.ReadLineAsync() 在同步 FileStream 上会自动退化为线程池模拟异步。
+            var stdoutStream = new FileStream(stdoutRead, FileAccess.Read, bufferSize: 4096, isAsync: false);
+            var stderrStream = new FileStream(stderrRead, FileAccess.Read, bufferSize: 4096, isAsync: false);
             var stdoutReader = new StreamReader(stdoutStream, System.Text.Encoding.UTF8);
             var stderrReader = new StreamReader(stderrStream, System.Text.Encoding.UTF8);
 
@@ -362,14 +365,25 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         }
         catch
         {
-            // 错误清理：终止挂起进程 + 关闭所有句柄
-            // hProcess 在 ResumeThread+CloseHandle 成功后已置零，非零说明进程仍未恢复
+            // 错误清理：终止进程 + 关闭所有句柄
+            // hProcess 在 ResumeThread+CloseHandle 成功后已置零，此时需通过 PID 终止已恢复的进程
             if (hThread != IntPtr.Zero)
                 NativeMethods.CloseHandle(hThread);
             if (hProcess != IntPtr.Zero)
             {
+                // 进程仍在挂起态：直接 TerminateProcess
                 NativeMethods.TerminateProcess(hProcess, 1);
                 NativeMethods.CloseHandle(hProcess);
+            }
+            else if (pid != 0)
+            {
+                // 进程已恢复执行（ResumeThread 成功但后续步骤失败）：通过 PID 强制终止
+                try
+                {
+                    using var runaway = Process.GetProcessById(pid);
+                    runaway.Kill();
+                }
+                catch { /* 进程可能已自行退出 */ }
             }
             process?.Dispose();
             stdoutRead?.Dispose();
@@ -464,6 +478,11 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
                 "EiTRVO 防火墙部分防护层不可用（WMI 服务异常），子进程监控、文件系统监控和网络监控已降级",
                 EiTRVO.ProEngine.Models.NotificationType.Warning);
         }
+
+        // 独立于 WMI 的进程树快照兜底：立即扫描一次，之后每 2s 轮询
+        ScanProcessTree();
+        _procTreeTimer = new System.Threading.Timer(
+            _ => ScanProcessTree(), null, 2000, 2000);
     }
 
     private void OnProcessStarted(object sender, EventArrivedEventArgs e)
@@ -501,8 +520,88 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         catch { }
     }
 
+    // ==================== 进程树快照（WMI 兜底） ====================
+
+    /// <summary>
+    /// 用 Toolhelp32 快照递归扫描游戏进程的**全部后代进程**，命中黑名单即触发熔断。
+    /// 不依赖 WMI，不需要管理员权限。
+    /// </summary>
+    private void ScanProcessTree()
+    {
+        if (_parentPid == 0 || _onThreat == null) return;
+
+        try
+        {
+            // 1. 获取全系统进程快照
+            IntPtr snapshot = NativeMethods.CreateToolhelp32Snapshot(
+                NativeMethods.TH32CS_SNAPPROCESS, 0);
+            if (snapshot == IntPtr.Zero || snapshot == (IntPtr)(-1)) return;
+
+            try
+            {
+                // 2. 构建 parent → children 映射（只收集一次，递归时查表）
+                var children = new Dictionary<int, List<(string Name, int Pid)>>();
+                var entry = new NativeMethods.PROCESSENTRY32();
+                entry.dwSize = Marshal.SizeOf<NativeMethods.PROCESSENTRY32>();
+
+                if (NativeMethods.Process32First(snapshot, ref entry))
+                {
+                    do
+                    {
+                        int ppid = entry.th32ParentProcessID;
+                        if (!children.ContainsKey(ppid))
+                            children[ppid] = new List<(string, int)>();
+                        children[ppid].Add((entry.szExeFile, entry.th32ProcessID));
+                    }
+                    while (NativeMethods.Process32Next(snapshot, ref entry));
+                }
+
+                // 3. 递归遍历：以 _parentPid 为根的整个进程树
+                var visited = new HashSet<int> { _parentPid };
+                var queue = new Queue<int>();
+                queue.Enqueue(_parentPid);
+
+                while (queue.Count > 0)
+                {
+                    int current = queue.Dequeue();
+                    if (!children.TryGetValue(current, out var kids)) continue;
+
+                    foreach (var (name, pid) in kids)
+                    {
+                        if (!visited.Add(pid)) continue;
+
+                        string fileName = Path.GetFileName(name);
+                        if (Blocklist.Contains(fileName))
+                        {
+                            // 立即杀子进程
+                            try { Process.GetProcessById(pid)?.Kill(); } catch { }
+                            _onThreat?.Invoke(name, pid, null);
+                            return; // 命中即停止本次扫描
+                        }
+
+                        queue.Enqueue(pid);
+                    }
+                }
+            }
+            finally
+            {
+                NativeMethods.CloseHandle(snapshot);
+            }
+        }
+        catch { /* 快照扫描失败不阻塞 WMI 路径 */ }
+    }
+
+    public void TerminateJobProcesses()
+    {
+        _jobHandle?.Dispose();
+        _jobHandle = null;
+    }
+
     public void StopMonitoring()
     {
+        _procTreeTimer?.Dispose();
+        _procTreeTimer = null;
+
         try
         {
             _watcher?.Stop();

@@ -235,7 +235,12 @@ public partial class HomeViewModel : BaseViewModel
         if (!_debugMode)
         {
             int requiredJava = PlatformHelper.GetMinecraftRequiredJavaVersion(instance.BaseVersion);
-            if (javaInfo.MajorVersion < requiredJava)
+            int maxJava = PlatformHelper.GetMaxRecommendedJavaVersion(instance.BaseVersion);
+
+            bool tooLow = javaInfo.MajorVersion < requiredJava;
+            bool tooHigh = javaInfo.MajorVersion > maxJava;
+
+            if (tooLow || tooHigh)
             {
                 if (JavaCompatibilityHandler != null)
                 {
