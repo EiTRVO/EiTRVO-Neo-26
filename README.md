@@ -334,8 +334,8 @@ dotnet publish "EiTRVO.UI\EiTRVO.UI.csproj" `
 
 > ⚠️ 字体文件已通过 `.gitignore` 排除在版本控制之外。克隆仓库后需自行获取字体文件：
 > 
-> 1. 访问 [HarmonyOS Sans 字体下载页](https://developer.huawei.com/consumer/cn/doc/design-guides-V1/font-0000001157868583-V1)
-> 2. 将 `HarmonyOS_Sans_SC_Regular.ttf` 改名为 `Font.ttf`
+> 1. 从 [华为 CDN](https://developer.huawei.com/images/download/next/HarmonyOS-Sans-v2.zip) 下载字体 zip
+> 2. 解压后将 `HarmonyOS_SansSC_Regular.ttf` 改名为 `Font.ttf`
 > 3. 放置于 `EiTRVO.UI/font/`
 
 ---
