@@ -63,6 +63,7 @@ public class DownloadService : IDownloadService
                 if (lib.Downloads?.Artifact?.Path != null && lib.Downloads.Artifact.Url != null)
                 {
                     string p = Path.Combine(libDir, lib.Downloads.Artifact.Path);
+                    if (!PathSafetyHelper.IsContained(p, libDir)) continue;
                     if (countedPaths.Add(p)) totalFiles++;
                 }
                 if (lib.Natives != null && lib.Natives.TryGetValue("windows", out var nc))
@@ -71,6 +72,7 @@ public class DownloadService : IDownloadService
                     if (info?.Path != null && info.Url != null)
                     {
                         string p = Path.Combine(libDir, info.Path);
+                        if (!PathSafetyHelper.IsContained(p, libDir)) continue;
                         if (countedPaths.Add(p)) totalFiles++;
                     }
                 }
@@ -81,7 +83,7 @@ public class DownloadService : IDownloadService
         if (detail.Logging?.Client?.File?.Url != null)
         {
             string p = Path.Combine(gameDir, detail.Logging.Client.File.Path ?? "log_configs/temp.xml");
-            if (countedPaths.Add(p)) totalFiles++;
+            if (PathSafetyHelper.IsContained(p, gameDir) && countedPaths.Add(p)) totalFiles++;
         }
 
         // Asset index JSON
@@ -154,6 +156,7 @@ public class DownloadService : IDownloadService
                 if (lib.Downloads?.Artifact?.Url != null && lib.Downloads.Artifact.Path != null)
                 {
                     var dest = Path.Combine(libDir, lib.Downloads.Artifact.Path);
+                    if (!PathSafetyHelper.IsContained(dest, libDir)) continue;
                     Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
                     Schedule(lib.Downloads.Artifact.Url, dest, lib.Downloads.Artifact.Sha1);
                 }
@@ -164,6 +167,7 @@ public class DownloadService : IDownloadService
                     if (info?.Url != null && info.Path != null)
                     {
                         var jarPath = Path.Combine(libDir, info.Path);
+                        if (!PathSafetyHelper.IsContained(jarPath, libDir)) continue;
                         Directory.CreateDirectory(Path.GetDirectoryName(jarPath)!);
                         string nativesOut = Path.Combine(gameDir, "natives", versionId);
                         Directory.CreateDirectory(nativesOut);
@@ -177,8 +181,11 @@ public class DownloadService : IDownloadService
         if (detail.Logging?.Client?.File != null && detail.Logging.Client.File.Url != null)
         {
             string dest = Path.Combine(gameDir, detail.Logging.Client.File.Path ?? "log_configs/temp.xml");
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            Schedule(detail.Logging.Client.File.Url, dest, detail.Logging.Client.File.Sha1);
+            if (PathSafetyHelper.IsContained(dest, gameDir))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                Schedule(detail.Logging.Client.File.Url, dest, detail.Logging.Client.File.Sha1);
+            }
         }
 
         // Asset index (already downloaded above)
@@ -213,6 +220,12 @@ public class DownloadService : IDownloadService
 
                     string subDir = hash.Substring(0, 2);
                     string dest = Path.Combine(objDir, subDir, hash);
+
+                    if (!PathSafetyHelper.IsContained(dest, objDir))
+                    {
+                        fileCompleted();
+                        continue;
+                    }
 
                     if (File.Exists(dest))
                     {

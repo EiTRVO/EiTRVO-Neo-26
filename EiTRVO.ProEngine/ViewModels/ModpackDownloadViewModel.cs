@@ -376,7 +376,9 @@ public partial class ModpackDownloadViewModel : BaseViewModel
         string gameDir = _gameFolder.GameDir;
         string packCacheDir = Path.Combine(gameDir, "installer_cache", "modpack_downloads");
         Directory.CreateDirectory(packCacheDir);
-        string mrpackPath = Path.Combine(packCacheDir, $"{entry.ProjectId}_{version.VersionNumber}.mrpack");
+        string safeProjectId = PathSafetyHelper.SanitizeNameComponent(entry.ProjectId);
+        string safeVersion = PathSafetyHelper.SanitizeNameComponent(version.VersionNumber);
+        string mrpackPath = Path.Combine(packCacheDir, $"{safeProjectId}_{safeVersion}.mrpack");
 
         if (!File.Exists(mrpackPath))
         {
@@ -463,7 +465,7 @@ public partial class ModpackDownloadViewModel : BaseViewModel
         // === Step 5: Create instance name ===
         string instanceName = SanitizeInstanceName(manifest.Name);
         if (string.IsNullOrWhiteSpace(instanceName))
-            instanceName = $"{entry.Title}_{mcVersion}";
+            instanceName = $"{PathSafetyHelper.SanitizeNameComponent(entry.Title)}_{mcVersion}";
 
         string targetDir = Path.Combine(gameDir, "versions", instanceName);
         if (Directory.Exists(targetDir))

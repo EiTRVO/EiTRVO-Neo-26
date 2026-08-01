@@ -108,7 +108,9 @@ internal static class ForgeInstaller
 
         string installerDir = Path.Combine(gameDir, "installer_cache");
         Directory.CreateDirectory(installerDir);
-        string installerPath = Path.Combine(installerDir, $"forge-{mcVersion}-{forgeVersion}-installer.jar");
+        string safeMc = PathSafetyHelper.SanitizeNameComponent(mcVersion);
+        string safeForge = PathSafetyHelper.SanitizeNameComponent(forgeVersion);
+        string installerPath = Path.Combine(installerDir, $"forge-{safeMc}-{safeForge}-installer.jar");
 
         showNotification("正在下载 Forge Installer...", NotificationType.Info, 0);
 
@@ -265,6 +267,7 @@ internal static class ForgeInstaller
                     continue;
 
                 string dest = Path.Combine(libDir, path);
+                if (!PathSafetyHelper.IsContained(dest, libDir)) continue;
                 if (File.Exists(dest))
                     continue;
 

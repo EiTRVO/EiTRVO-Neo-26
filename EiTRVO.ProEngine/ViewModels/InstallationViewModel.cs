@@ -610,7 +610,7 @@ public partial class InstallationViewModel : BaseViewModel
         IsFileProgressIndeterminate = true;
         FileProgressValue = 0;
 
-        string ofFileName = $"{versionName}.jar";
+        string ofFileName = $"{PathSafetyHelper.SanitizeNameComponent(versionName)}.jar";
         string installerCacheDir = Path.Combine(_gameFolder.GameDir, "installer_cache");
         Directory.CreateDirectory(installerCacheDir);
         string ofJarPath = Path.Combine(installerCacheDir, $"optifine_coexist_{ofFileName}");
@@ -688,7 +688,7 @@ public partial class InstallationViewModel : BaseViewModel
             string modsDir = Path.Combine(_gameFolder.GameDir, "mods");
             Directory.CreateDirectory(modsDir);
             string destOfJar = Path.Combine(modsDir, ofFileName);
-            if (!File.Exists(destOfJar))
+            if (!File.Exists(destOfJar) && PathSafetyHelper.IsContained(destOfJar, modsDir))
                 File.Copy(ofJarPath, destOfJar);
         }
     }
@@ -759,7 +759,7 @@ public partial class InstallationViewModel : BaseViewModel
         ProgressText = "正在下载 Fabric API...";
         IsProgressIndeterminate = true;
 
-        string jarFileName = $"fabric-api-{apiVersion}.jar";
+        string jarFileName = $"fabric-api-{PathSafetyHelper.SanitizeNameComponent(apiVersion)}.jar";
         string jarUrl = $"https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/{apiVersion}/{jarFileName}";
 
         string modsDir = useIsolatedDir
@@ -767,6 +767,11 @@ public partial class InstallationViewModel : BaseViewModel
             : Path.Combine(_gameFolder.GameDir, "mods");
         Directory.CreateDirectory(modsDir);
         string destPath = Path.Combine(modsDir, jarFileName);
+        if (!PathSafetyHelper.IsContained(destPath, modsDir))
+        {
+            _notificationService.Show("Fabric API 下载路径校验失败。", NotificationType.Warning);
+            return;
+        }
 
         // Skip if already exists
         if (File.Exists(destPath))

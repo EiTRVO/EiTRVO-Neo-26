@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using static EiTRVO.ProEngine.Helpers.Endpoints;
 
@@ -90,7 +91,8 @@ internal static class NeoForgeInstaller
         string installerUrl = NeoForgeInstaller(neoForgeVersion);
         string installerDir = Path.Combine(gameDir, "installer_cache");
         Directory.CreateDirectory(installerDir);
-        string installerPath = Path.Combine(installerDir, $"neoforge-{neoForgeVersion}-installer.jar");
+        string safeNeoForge = PathSafetyHelper.SanitizeNameComponent(neoForgeVersion);
+        string installerPath = Path.Combine(installerDir, $"neoforge-{safeNeoForge}-installer.jar");
 
         showNotification("正在下载 NeoForge Installer...", NotificationType.Info, 0);
 

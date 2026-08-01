@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using EiTRVO.ProEngine.Helpers;
 using EiTRVO.ProEngine.Models;
 using static EiTRVO.ProEngine.Helpers.Endpoints;
 
@@ -68,6 +69,7 @@ internal static class FabricInstaller
                 if (artifact?.Url != null && artifact.Path != null)
                 {
                     string dest = Path.Combine(libDir, artifact.Path);
+                    if (!PathSafetyHelper.IsContained(dest, libDir)) continue;
                     if (!File.Exists(dest))
                         libsToDownload.Add((artifact.Url, dest));
                 }

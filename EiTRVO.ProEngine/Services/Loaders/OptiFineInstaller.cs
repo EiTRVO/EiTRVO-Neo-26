@@ -84,7 +84,7 @@ internal static class OptiFineInstaller
         Action<string, NotificationType, int> showNotification,
         CancellationToken ct = default)
     {
-        string fileName = $"{optiFineVersion}.jar";
+        string fileName = $"{PathSafetyHelper.SanitizeNameComponent(optiFineVersion)}.jar";
 
         string installerDir = Path.Combine(gameDir, "installer_cache");
         Directory.CreateDirectory(installerDir);
@@ -251,13 +251,17 @@ internal static class OptiFineInstaller
         string ofLibVersion = optiFineVersion.StartsWith("OptiFine_")
             ? optiFineVersion.Substring("OptiFine_".Length)
             : optiFineVersion;
-        string ofLibDir = Path.Combine(gameDir, "libraries", "optifine", "OptiFine", ofLibVersion);
+        string safeOfLibVersion = PathSafetyHelper.SanitizeNameComponent(ofLibVersion);
+        string ofLibDir = Path.Combine(gameDir, "libraries", "optifine", "OptiFine", safeOfLibVersion);
         Directory.CreateDirectory(ofLibDir);
-        string ofLibDest = Path.Combine(ofLibDir, $"OptiFine-{ofLibVersion}.jar");
+        string ofLibDest = Path.Combine(ofLibDir, $"OptiFine-{safeOfLibVersion}.jar");
+        PathSafetyHelper.ValidateContained(ofLibDest, ofLibDir);
         File.Copy(installerPath, ofLibDest, overwrite: true);
 
         Directory.CreateDirectory(targetVersionDir);
-        string instanceJar = Path.Combine(targetVersionDir, $"{instanceName}.jar");
+        string safeInstanceName = PathSafetyHelper.SanitizeNameComponent(instanceName);
+        string instanceJar = Path.Combine(targetVersionDir, $"{safeInstanceName}.jar");
+        PathSafetyHelper.ValidateContained(instanceJar, targetVersionDir);
         File.Copy(vanillaJar, instanceJar, overwrite: true);
 
         var vanillaDetail = JsonSerializer.Deserialize<VersionDetail>(File.ReadAllText(vanillaJson));
@@ -419,12 +423,13 @@ internal static class OptiFineInstaller
                 File.ReadAllText(ofVersionJsonFile));
             if (ofDetail?.Id != null)
             {
-                string expectedJar = Path.Combine(targetVersionDir, $"{ofDetail.Id}.jar");
+                string expectedJar = Path.Combine(targetVersionDir, $"{PathSafetyHelper.SanitizeNameComponent(ofDetail.Id)}.jar");
                 if (!File.Exists(expectedJar))
                 {
-                    string parentVer = ofDetail.InheritsFrom ?? mcVersion;
+                    string parentVer = PathSafetyHelper.SanitizeNameComponent(ofDetail.InheritsFrom ?? mcVersion);
                     string fallback = Path.Combine(gameDir, "versions", parentVer, $"{parentVer}.jar");
-                    if (File.Exists(fallback))
+                    if (File.Exists(fallback) &&
+                        PathSafetyHelper.IsContained(fallback, Path.Combine(gameDir, "versions")))
                         File.Copy(fallback, expectedJar);
                 }
             }

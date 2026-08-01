@@ -401,8 +401,9 @@ public partial class ManageViewModel : BaseViewModel
             // Step A: download parent version
             if (!string.IsNullOrEmpty(inheritsFrom))
             {
-                string parentDir = Path.Combine(_gameFolder.GameDir, "versions", inheritsFrom);
-                if (!Directory.Exists(parentDir) || !File.Exists(Path.Combine(parentDir, $"{inheritsFrom}.jar")))
+                string safeInheritsFrom = PathSafetyHelper.SanitizeNameComponent(inheritsFrom);
+                string parentDir = Path.Combine(_gameFolder.GameDir, "versions", safeInheritsFrom);
+                if (!Directory.Exists(parentDir) || !File.Exists(Path.Combine(parentDir, $"{safeInheritsFrom}.jar")))
                 {
                     _notificationService.Show($"正在下载父版本 {inheritsFrom}...", NotificationType.Info);
                     var versions = await _downloadService.LoadOnlineVersionsAsync(_httpClient);
@@ -412,7 +413,7 @@ public partial class ManageViewModel : BaseViewModel
 
                     await _downloadService.DownloadVersionFilesAsync(
                         _httpClient, _gameFolder.GameDir, parentManifest.Url,
-                        inheritsFrom, inheritsFrom, progress, _notificationService.Show, ct);
+                        safeInheritsFrom, safeInheritsFrom, progress, _notificationService.Show, ct);
                 }
             }
 
