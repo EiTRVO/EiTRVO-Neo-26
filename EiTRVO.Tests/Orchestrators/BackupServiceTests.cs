@@ -90,9 +90,9 @@ public class BackupServiceTests : IDisposable
     [TestMethod]
     public void ShouldBackup_Monthly_SameMonth_ReturnsFalse()
     {
-        // Same calendar month should not trigger
-        var fiveDaysAgo = DateTimeOffset.UtcNow.AddDays(-5);
-        Assert.IsFalse(BackupService.ShouldBackup(BackupInterval.Monthly, fiveDaysAgo));
+        // Same calendar month should not trigger — use 1st of current month (always same month)
+        var firstOfMonth = new DateTimeOffset(DateTimeOffset.UtcNow.Year, DateTimeOffset.UtcNow.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        Assert.IsFalse(BackupService.ShouldBackup(BackupInterval.Monthly, firstOfMonth));
     }
 
     [TestMethod]
