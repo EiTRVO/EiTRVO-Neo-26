@@ -201,15 +201,11 @@
                                     <RadioButton x:Name="rbStandardDefense"
                                                  GroupName="DefenseMode"
                                                  Content="标准防御"
-                                                 FontSize="12"
-                                                 Foreground="{DynamicResource TextPrimary}"
                                                  IsChecked="{Binding AdvancedDefenseEnabled, Mode=TwoWay, Converter={StaticResource BoolInvertConverter}}"
                                                  Margin="0,2"/>
                                     <RadioButton x:Name="rbAdvancedDefense"
                                                  GroupName="DefenseMode"
                                                  Content="高级防御"
-                                                 FontSize="12"
-                                                 Foreground="{DynamicResource TextPrimary}"
                                                  IsChecked="{Binding AdvancedDefenseEnabled, Mode=TwoWay}"
                                                  Margin="0,2"/>
                                 </StackPanel>

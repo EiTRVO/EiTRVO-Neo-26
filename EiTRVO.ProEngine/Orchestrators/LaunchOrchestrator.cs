@@ -867,22 +867,16 @@ public class LaunchOrchestrator
         bool firewallEnabled = FirewallEnabledProvider?.Invoke() ?? false;
         string workDir = workingDirectory ?? _gameFolder.GameDir;
 
-        // === 进程创建路径选择 ===
-        HardenedProcessHandle? handle = null;
-        StreamReader? stdoutReader = null;
-        StreamReader? stderrReader = null;
-
-        if (_gameSecurity != null && firewallEnabled)
+        // === 统一管道创建路径：显式 isAsync:false，杜绝匿名管道覆盖 I/O 异常 ===
+        HardenedProcessHandle? handle = _gameSecurity?.StartSuspendedAndHarden(
+            javaInfo.Path, args, workDir, harden: firewallEnabled);
+        if (handle != null)
         {
-            // === 加固路径：CREATE_SUSPENDED → Layer 0/1/2 → ResumeThread ===
-            handle = _gameSecurity.StartSuspendedAndHarden(javaInfo.Path, args, workDir);
             _gameProcess = handle.Process;
-            stdoutReader = handle.StandardOutput;
-            stderrReader = handle.StandardError;
         }
         else
         {
-            // === 原有路径：Process.Start ===
+            // 非 Windows 平台或无安全服务的退化路径
             var psi = new ProcessStartInfo
             {
                 FileName = javaInfo.Path,
@@ -900,7 +894,7 @@ public class LaunchOrchestrator
 
         _gameCts = new CancellationTokenSource();
 
-        // === EiTRVO Firewall Layer 3 (WMI 监控) ===
+        // === EiTRVO Firewall Layer 3 (IOCP 监控) ===
         if (_gameSecurity != null && firewallEnabled)
         {
             _notificationService.AppendLog(
@@ -966,7 +960,7 @@ public class LaunchOrchestrator
             var stderrQueue = new System.Collections.Concurrent.ConcurrentQueue<string?>();
 
             // stdout reader: prefer hardened handle, fall back to Process.StandardOutput
-            var stdoutRdr = stdoutReader ?? _gameProcess.StandardOutput;
+            var stdoutRdr = handle?.StandardOutput ?? _gameProcess.StandardOutput;
             _ = Task.Run(async () =>
             {
                 try
@@ -982,7 +976,7 @@ public class LaunchOrchestrator
             });
 
             // stderr reader: prefer hardened handle, fall back to Process.StandardError
-            var stderrRdr = stderrReader ?? _gameProcess.StandardError;
+            var stderrRdr = handle?.StandardError ?? _gameProcess.StandardError;
             _ = Task.Run(async () =>
             {
                 try

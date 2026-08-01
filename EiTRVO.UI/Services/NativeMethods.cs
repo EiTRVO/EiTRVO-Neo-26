@@ -66,6 +66,35 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
 
+    // IOCP
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern IntPtr CreateIoCompletionPort(
+        IntPtr FileHandle,
+        IntPtr ExistingCompletionPort,
+        IntPtr CompletionKey,
+        uint NumberOfConcurrentThreads);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool GetQueuedCompletionStatus(
+        IntPtr CompletionPort,
+        out uint lpNumberOfBytesTransferred,
+        out IntPtr lpCompletionKey,
+        out IntPtr lpOverlapped,
+        uint dwMilliseconds);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool IsProcessInJob(
+        IntPtr ProcessHandle,
+        SafeFileHandle JobHandle,
+        out bool Result);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool PostQueuedCompletionStatus(
+        IntPtr CompletionPort,
+        uint dwNumberOfBytesTransferred,
+        IntPtr dwCompletionKey,
+        IntPtr lpOverlapped);
+
     // Toolhelp32 — DLL enumeration (Layer 5a) + process tree (Layer 3 fallback)
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr CreateToolhelp32Snapshot(
@@ -103,6 +132,16 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern void DeleteProcThreadAttributeList(IntPtr lpAttributeList);
+
+    // ==================== Ntdll ====================
+
+    [DllImport("ntdll.dll")]
+    public static extern int NtQueryInformationProcess(
+        IntPtr ProcessHandle,
+        int ProcessInformationClass,
+        IntPtr ProcessInformation,
+        uint ProcessInformationLength,
+        out uint ReturnLength);
 
     // ==================== Advapi32 ====================
 
@@ -157,6 +196,7 @@ internal static class NativeMethods
     // ==================== Constants ====================
 
     public const uint PROCESS_QUERY_INFORMATION = 0x0400;
+    public const uint PROCESS_VM_READ = 0x0010;
 
     public const uint TOKEN_ADJUST_PRIVILEGES = 0x0020;
     public const uint TOKEN_QUERY = 0x0008;
@@ -197,6 +237,32 @@ internal static class NativeMethods
     public const uint AF_INET = 2;
     public const uint TCP_TABLE_OWNER_PID_ALL = 5;
 
+    // IOCP / Job notification messages
+    // https://docs.microsoft.com/en-us/windows/win32/api/jobapi2/ns-jobapi2-jobobject_associate_completion_port
+    public const uint JOB_OBJECT_MSG_END_OF_JOB_TIME = 1;
+    public const uint JOB_OBJECT_MSG_END_OF_PROCESS_TIME = 2;
+    public const uint JOB_OBJECT_MSG_ACTIVE_PROCESS_LIMIT = 3;
+    public const uint JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO = 4;
+    public const uint JOB_OBJECT_MSG_NEW_PROCESS = 6;
+    public const uint JOB_OBJECT_MSG_EXIT_PROCESS = 7;
+    public const uint JOB_OBJECT_MSG_ABNORMAL_EXIT_PROCESS = 8;
+    public const uint IOCP_QUIT_KEY = 0xFFFFFFFF;
+
+    // Job Object UI Limits (JOB_OBJECT_BASIC_UI_RESTRICTIONS)
+    public const uint JOB_OBJECT_UILIMIT_READCLIPBOARD = 0x00000001;
+    public const uint JOB_OBJECT_UILIMIT_WRITECLIPBOARD = 0x00000002;
+    public const uint JOB_OBJECT_UILIMIT_HANDLES = 0x00000004;
+    public const uint JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS = 0x00000008;
+    public const uint JOB_OBJECT_UILIMIT_DISPLAYSETTINGS = 0x00000010;
+    public const uint JOB_OBJECT_UILIMIT_DESKTOP = 0x00000040;
+    public const uint JOB_OBJECT_UILIMIT_EXITWINDOWS = 0x00000080;
+
+    // Job Object Security Limits
+    public const uint JOB_OBJECT_SECURITY_NO_ADMIN = 0x00000001;
+
+    // NtQueryInformationProcess class
+    public const int ProcessCommandLineInformation = 60;
+
     // ==================== Structs ====================
 
     [StructLayout(LayoutKind.Sequential)]
@@ -235,6 +301,29 @@ internal static class NativeMethods
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct JOBOBJECT_BASIC_UI_RESTRICTIONS
+    {
+        public uint UIRestrictionsClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct JOBOBJECT_SECURITY_LIMIT_INFORMATION
+    {
+        public uint SecurityLimitFlags;
+        public IntPtr JobToken;
+        public IntPtr SidsToDisable;
+        public IntPtr PrivilegesToDelete;
+        public IntPtr RestrictedSids;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct JOBOBJECT_ASSOCIATE_COMPLETION_PORT
+    {
+        public IntPtr CompletionKey;
+        public IntPtr CompletionPort;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct IO_COUNTERS
     {
         public ulong ReadOperationCount;
@@ -259,6 +348,9 @@ internal static class NativeMethods
     public enum JOBOBJECTINFOCLASS
     {
         JobObjectBasicLimitInformation = 2,
+        JobObjectBasicUIRestrictions = 4,
+        JobObjectSecurityLimitInformation = 5,
+        JobObjectAssociateCompletionPortInformation = 7,
         JobObjectExtendedLimitInformation = 9,
     }
 
@@ -344,6 +436,16 @@ internal static class NativeMethods
         public int dwFlags;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
         public string szExeFile;
+    }
+
+    // ==================== NtQueryInformationProcess structs ====================
+
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    public struct UNICODE_STRING
+    {
+        [FieldOffset(0)] public ushort Length;
+        [FieldOffset(2)] public ushort MaximumLength;
+        [FieldOffset(8)] public IntPtr Buffer;
     }
 
     // ==================== TCP table structs ====================

@@ -7,10 +7,10 @@ namespace EiTRVO.ProEngine.Models;
 public static class AppInfo
 {
     public const string Title = "EiTRVO Neo";
-    public const string Version = "26.1.1008.1";
+    public const string Version = "26.1.1008.2";
     public const string VersionShort = "26.1";
     public const string ProEngineVersion = "M1(1008)";
-    public const string BuildDate = "2026年7月";
+    public const string BuildDate = "2026年8月";
     public const string Runtime = ".NET";
     public const string Architecture = "Windows Desktop";
     public const string Platform = "x86_64";

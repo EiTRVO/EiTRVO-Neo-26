@@ -10,7 +10,7 @@
     <Product>EiTRVO Neo</Product>
     <Description>A launcher powered by EiTRVO ProEngine</Description>
     <Copyright>© 2026 EiTRVO</Copyright>
-    <Version>26.1.1008.1</Version>
+    <Version>26.1.1008.2</Version>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>

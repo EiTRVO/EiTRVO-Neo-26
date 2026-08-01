@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Management;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using EiTRVO.ProEngine.Orchestrators;
 using EiTRVO.ProEngine.Services;
@@ -12,9 +12,14 @@ namespace EiTRVO.UI.Services;
 
 /// <summary>
 /// 游戏进程安全加固的 Windows 实现。
-/// Layer 1: AdjustTokenPrivileges 移除 SeShutdownPrivilege
-/// Layer 2: Job Object (KILL_ON_JOB_CLOSE + 50 进程上限)
-/// Layer 3: WMI Win32_ProcessStartTrace 子进程黑名单监控
+/// Layer 0: 扩展点禁用策略（EXTENSION_POINT_DISABLE_ALWAYS_ON）
+/// Layer 1+2 合并为统一 Job Object:
+///   - KILL_ON_JOB_CLOSE + 进程数上限 50
+///   - UI 限制（剪贴板/句柄/桌面/退出 Windows）
+///   - JOB_OBJECT_SECURITY_NO_ADMIN
+///   - 子进程自动继承全部限制
+/// Layer 3: IOCP 子进程黑名单监控（内核同步推送，微秒级响应）
+/// Layer 4/5a/5b: FileSystemWatcher + DLL 轮询 + TCP 轮询（高级防御）
 /// </summary>
 public class WindowsGameProcessSecurityService : IGameProcessSecurityService
 {
@@ -42,9 +47,11 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
     };
 
     private SafeFileHandle? _jobHandle;
-    private ManagementEventWatcher? _watcher;
-    private System.Threading.Timer? _procTreeTimer; // Layer 3 进程树快照轮询（WMI 兜底）
-    private volatile int _parentPid;
+
+    // === IOCP 子进程拦截（替代原 WMI + Toolhelp32 双通道） ===
+    private IntPtr _iocpHandle = IntPtr.Zero;
+    private Thread? _iocpThread;
+    private CancellationTokenSource? _iocpCts;
     private volatile Action<string, int, string?>? _onThreat;
 
     // === Layer 4: FileSystemWatcher ===
@@ -68,88 +75,139 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         _notification = notificationService;
     }
 
-    // ==================== Layer 1 + 2 ====================
+    // ==================== Job Object 统一加固 + IOCP ====================
 
-    public void HardenProcess(Process process)
+    /// <summary>创建并配置 Job Object（包含 UI/安全限制），返回 false 表示 Job 不可用。</summary>
+    private bool CreateJobWithLimits(out SafeFileHandle jobHandle, IntPtr iocpHandle)
     {
-        IntPtr hProcess = NativeMethods.OpenProcess(
-            NativeMethods.PROCESS_QUERY_INFORMATION, false, process.Id);
-
-        if (hProcess != IntPtr.Zero)
+        jobHandle = NativeMethods.CreateJobObject(IntPtr.Zero, null);
+        if (jobHandle.IsInvalid)
         {
+            _notification?.AppendLog(
+                "EiTRVO Firewall: CreateJobObject 失败",
+                EiTRVO.ProEngine.Models.NotificationType.Warning);
+            jobHandle = null!;
+            return false;
+        }
+
+        try
+        {
+            // a. 扩展限制：KILL_ON_JOB_CLOSE + 进程数上限
+            var limits = new NativeMethods.JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
+            limits.BasicLimitInformation.LimitFlags =
+                NativeMethods.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
+                NativeMethods.JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+            limits.BasicLimitInformation.ActiveProcessLimit = 50;
+
+            int limSize = Marshal.SizeOf<NativeMethods.JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
+            IntPtr limPtr = Marshal.AllocHGlobal(limSize);
             try
             {
-                // ── Layer 1: 移除所有非必需特权 ──
-                if (NativeMethods.OpenProcessToken(hProcess,
-                    NativeMethods.TOKEN_ADJUST_PRIVILEGES | NativeMethods.TOKEN_QUERY,
-                    out IntPtr hToken))
+                Marshal.StructureToPtr(limits, limPtr, false);
+                if (!NativeMethods.SetInformationJobObject(jobHandle,
+                    NativeMethods.JOBOBJECTINFOCLASS.JobObjectExtendedLimitInformation,
+                    limPtr, (uint)limSize))
                 {
-                    try
-                    {
-                        foreach (var priv in NativeMethods.PrivilegesToRemove)
-                        {
-                            if (NativeMethods.LookupPrivilegeValue(
-                                null, priv, out var luid))
-                            {
-                                var tp = new NativeMethods.TOKEN_PRIVILEGES
-                                {
-                                    PrivilegeCount = 1,
-                                    Privileges = new NativeMethods.LUID_AND_ATTRIBUTES
-                                    {
-                                        Luid = luid,
-                                        Attributes = NativeMethods.SE_PRIVILEGE_REMOVED
-                                    }
-                                };
-                                NativeMethods.AdjustTokenPrivileges(
-                                    hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
-                            }
-                        }
-                    }
-                    finally { NativeMethods.CloseHandle(hToken); }
-                }
-
-                // ── Layer 2: Job Object ──
-                _jobHandle = NativeMethods.CreateJobObject(IntPtr.Zero, null);
-                if (!_jobHandle.IsInvalid)
-                {
-                    var limits = new NativeMethods.JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
-                    limits.BasicLimitInformation.LimitFlags =
-                        NativeMethods.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
-                        NativeMethods.JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
-                    limits.BasicLimitInformation.ActiveProcessLimit = 50;
-
-                    int size = Marshal.SizeOf<NativeMethods.JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
-                    IntPtr ptr = Marshal.AllocHGlobal(size);
-                    try
-                    {
-                        Marshal.StructureToPtr(limits, ptr, false);
-                        NativeMethods.SetInformationJobObject(
-                            _jobHandle,
-                            NativeMethods.JOBOBJECTINFOCLASS.JobObjectExtendedLimitInformation,
-                            ptr, (uint)size);
-                    }
-                    finally { Marshal.FreeHGlobal(ptr); }
-
-                    NativeMethods.AssignProcessToJobObject(_jobHandle, hProcess);
+                    _notification?.AppendLog(
+                        $"EiTRVO Firewall: SetInformationJobObject(ExtendedLimit) 失败 (错误码 {Marshal.GetLastWin32Error()})",
+                        EiTRVO.ProEngine.Models.NotificationType.Warning);
                 }
             }
-            finally { NativeMethods.CloseHandle(hProcess); }
+            finally { Marshal.FreeHGlobal(limPtr); }
+
+            // b. UI 限制：剪贴板 / 句柄 / 桌面 / 显示 / 系统参数 / 退出 Windows
+            var uiLimits = new NativeMethods.JOBOBJECT_BASIC_UI_RESTRICTIONS
+            {
+                UIRestrictionsClass =
+                    NativeMethods.JOB_OBJECT_UILIMIT_READCLIPBOARD |
+                    NativeMethods.JOB_OBJECT_UILIMIT_WRITECLIPBOARD |
+                    NativeMethods.JOB_OBJECT_UILIMIT_HANDLES |
+                    NativeMethods.JOB_OBJECT_UILIMIT_DISPLAYSETTINGS |
+                    NativeMethods.JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS |
+                    NativeMethods.JOB_OBJECT_UILIMIT_DESKTOP |
+                    NativeMethods.JOB_OBJECT_UILIMIT_EXITWINDOWS
+            };
+            int uiSize = Marshal.SizeOf<NativeMethods.JOBOBJECT_BASIC_UI_RESTRICTIONS>();
+            IntPtr uiPtr = Marshal.AllocHGlobal(uiSize);
+            try
+            {
+                Marshal.StructureToPtr(uiLimits, uiPtr, false);
+                if (!NativeMethods.SetInformationJobObject(jobHandle,
+                    NativeMethods.JOBOBJECTINFOCLASS.JobObjectBasicUIRestrictions,
+                    uiPtr, (uint)uiSize))
+                {
+                    _notification?.AppendLog(
+                        $"EiTRVO Firewall: SetInformationJobObject(UIRestrictions) 失败 (错误码 {Marshal.GetLastWin32Error()})",
+                        EiTRVO.ProEngine.Models.NotificationType.Warning);
+                }
+            }
+            finally { Marshal.FreeHGlobal(uiPtr); }
+
+            // c. 安全限制：禁止管理员令牌（Windows 8+ 部分 SKU 不支持，静默降级）
+            try
+            {
+                var secLimits = new NativeMethods.JOBOBJECT_SECURITY_LIMIT_INFORMATION
+                {
+                    SecurityLimitFlags = NativeMethods.JOB_OBJECT_SECURITY_NO_ADMIN
+                };
+                int secSize = Marshal.SizeOf<NativeMethods.JOBOBJECT_SECURITY_LIMIT_INFORMATION>();
+                IntPtr secPtr = Marshal.AllocHGlobal(secSize);
+                try
+                {
+                    Marshal.StructureToPtr(secLimits, secPtr, false);
+                    NativeMethods.SetInformationJobObject(jobHandle,
+                        NativeMethods.JOBOBJECTINFOCLASS.JobObjectSecurityLimitInformation,
+                        secPtr, (uint)secSize);
+                }
+                finally { Marshal.FreeHGlobal(secPtr); }
+            }
+            catch { /* 不支持的 SKU，静默跳过 */ }
+
+            // d. 关联 IOCP 端口
+            var iocpAssoc = new NativeMethods.JOBOBJECT_ASSOCIATE_COMPLETION_PORT
+            {
+                CompletionKey = IntPtr.Zero,
+                CompletionPort = iocpHandle
+            };
+            int assocSize = Marshal.SizeOf<NativeMethods.JOBOBJECT_ASSOCIATE_COMPLETION_PORT>();
+            IntPtr assocPtr = Marshal.AllocHGlobal(assocSize);
+            try
+            {
+                Marshal.StructureToPtr(iocpAssoc, assocPtr, false);
+                if (!NativeMethods.SetInformationJobObject(jobHandle,
+                    NativeMethods.JOBOBJECTINFOCLASS.JobObjectAssociateCompletionPortInformation,
+                    assocPtr, (uint)assocSize))
+                {
+                    _notification?.AppendLog(
+                        $"EiTRVO Firewall: SetInformationJobObject(AssociateCompletionPort) 失败 (错误码 {Marshal.GetLastWin32Error()})",
+                        EiTRVO.ProEngine.Models.NotificationType.Warning);
+                }
+            }
+            finally { Marshal.FreeHGlobal(assocPtr); }
+
+            return true;
+        }
+        catch
+        {
+            jobHandle.Dispose();
+            jobHandle = null!;
+            throw;
         }
     }
 
-    // ==================== CREATE_SUSPENDED: Layer 0 + 1 + 2 原子化 ====================
+    // ==================== CREATE_SUSPENDED: 统一管道创建 + 可选加固 ====================
 
     /// <summary>
-    /// 用 CREATE_SUSPENDED 创建进程 → Layer 0 (扩展点禁用) / Layer 1 (特权移除) /
-    /// Layer 2 (JobObject) → ResumeThread → 返回 HardenedProcessHandle。
-    /// 恢复执行前所有加固已就位，消除 Process.Start → HardenProcess 之间的竞态窗口。
+    /// 用 CREATE_SUSPENDED 创建进程 → 管道显式 isAsync:false → 可选加固 → ResumeThread。
+    /// harden=false 时跳过 Layer 0/1/2，但仍使用显式管道控制以保证 isAsync: false。
     /// </summary>
     public HardenedProcessHandle StartSuspendedAndHarden(
         string fileName,
         IReadOnlyList<string> arguments,
-        string workingDirectory)
+        string workingDirectory,
+        bool harden = true)
     {
-        // ── 1. 创建匿名管道（stdout / stderr）──
+        // ── 1. 创建匿名管道（stdout / stderr），所有路径统一 ──
         var sa = new NativeMethods.SECURITY_ATTRIBUTES();
         sa.nLength = Marshal.SizeOf<NativeMethods.SECURITY_ATTRIBUTES>();
         sa.lpSecurityDescriptor = IntPtr.Zero;
@@ -166,12 +224,11 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
             if (!NativeMethods.CreatePipe(out SafeFileHandle stderrReadInherit, out stderrWrite, ref sa, 0))
                 throw new InvalidOperationException($"CreatePipe (stderr) 失败: {Marshal.GetLastWin32Error()}");
 
-            // 管道 read 端改为不可继承：子进程不应读取自己的 stdout/stderr
-            IntPtr curProc = (IntPtr)(-1); // GetCurrentProcess pseudo-handle
+            IntPtr curProc = (IntPtr)(-1);
             if (!NativeMethods.DuplicateHandle(curProc, stdoutReadInherit, curProc,
                     out stdoutRead, 0, false, NativeMethods.DUPLICATE_SAME_ACCESS))
                 throw new InvalidOperationException($"DuplicateHandle (stdout) 失败: {Marshal.GetLastWin32Error()}");
-            stdoutReadInherit.Dispose(); // 关闭可继承原始句柄
+            stdoutReadInherit.Dispose();
 
             if (!NativeMethods.DuplicateHandle(curProc, stderrReadInherit, curProc,
                     out stderrRead, 0, false, NativeMethods.DUPLICATE_SAME_ACCESS))
@@ -189,46 +246,40 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         IntPtr hThread = IntPtr.Zero;
         int pid = 0;
         Process? process = null;
+        SafeFileHandle? newJobHandle = null;
+        IntPtr iocpHandle = IntPtr.Zero;
 
         try
         {
-            // ── 2. Layer 0: 构建 STARTUPINFOEX + 扩展点禁用策略 ──
+            // ── 2. Layer 0: STARTUPINFOEX + 可选扩展点禁用 ──
             var siEx = new NativeMethods.STARTUPINFOEX();
             siEx.StartupInfo.cb = Marshal.SizeOf<NativeMethods.STARTUPINFOEX>();
             siEx.StartupInfo.hStdOutput = stdoutWrite.DangerousGetHandle();
             siEx.StartupInfo.hStdError = stderrWrite.DangerousGetHandle();
-            siEx.StartupInfo.hStdInput = IntPtr.Zero; // no stdin — game doesn't need it
+            siEx.StartupInfo.hStdInput = IntPtr.Zero;
             siEx.StartupInfo.dwFlags = NativeMethods.STARTF_USESTDHANDLES;
 
-            // 初始化扩展属性列表（两次调用：查询大小 + 分配）
-            int attrSize = 0;
-            NativeMethods.InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attrSize);
-            // 预期 GetLastWin32Error == 122 (ERROR_INSUFFICIENT_BUFFER)，attrSize > 0
-
-            if (attrSize > 0)
+            if (harden)
             {
-                siEx.lpAttributeList = Marshal.AllocHGlobal(attrSize);
-                if (NativeMethods.InitializeProcThreadAttributeList(siEx.lpAttributeList, 1, 0, ref attrSize))
+                int attrSize = 0;
+                NativeMethods.InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attrSize);
+                if (attrSize > 0)
                 {
-                    // 注入 EXTENSION_POINT_DISABLE_ALWAYS_ON 策略（按值传递，需分配内存）
-                    IntPtr mitigationValue = Marshal.AllocHGlobal(sizeof(long));
-                    try
+                    siEx.lpAttributeList = Marshal.AllocHGlobal(attrSize);
+                    if (NativeMethods.InitializeProcThreadAttributeList(siEx.lpAttributeList, 1, 0, ref attrSize))
                     {
-                        Marshal.WriteInt64(mitigationValue,
-                            NativeMethods.PROCESS_CREATION_MITIGATION_POLICY_EXTENSION_POINT_DISABLE_ALWAYS_ON);
-                        IntPtr sizeVal = (IntPtr)sizeof(long);
-                        NativeMethods.UpdateProcThreadAttribute(
-                            siEx.lpAttributeList,
-                            0,
-                            (IntPtr)NativeMethods.PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY,
-                            mitigationValue,
-                            sizeVal,
-                            IntPtr.Zero,
-                            IntPtr.Zero);
-                    }
-                    finally
-                    {
-                        Marshal.FreeHGlobal(mitigationValue);
+                        IntPtr mitigationValue = Marshal.AllocHGlobal(sizeof(long));
+                        try
+                        {
+                            Marshal.WriteInt64(mitigationValue,
+                                NativeMethods.PROCESS_CREATION_MITIGATION_POLICY_EXTENSION_POINT_DISABLE_ALWAYS_ON);
+                            IntPtr sizeVal = (IntPtr)sizeof(long);
+                            NativeMethods.UpdateProcThreadAttribute(
+                                siEx.lpAttributeList, 0,
+                                (IntPtr)NativeMethods.PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY,
+                                mitigationValue, sizeVal, IntPtr.Zero, IntPtr.Zero);
+                        }
+                        finally { Marshal.FreeHGlobal(mitigationValue); }
                     }
                 }
             }
@@ -236,7 +287,7 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
             // ── 3. 构建命令行 ──
             string cmdLine = BuildCommandLine(fileName, arguments);
 
-            // ── 4. CreateProcess (EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED) ──
+            // ── 4. CreateProcess ──
             uint flags = NativeMethods.EXTENDED_STARTUPINFO_PRESENT
                        | NativeMethods.CREATE_SUSPENDED
                        | NativeMethods.CREATE_NO_WINDOW;
@@ -254,7 +305,7 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
                 lpStartupInfo: ref siEx,
                 lpProcessInformation: out procInfo);
 
-            // 释放扩展属性列表（CreateProcess 后即可释放，无论成败）
+            // 释放扩展属性列表
             if (siEx.lpAttributeList != IntPtr.Zero)
             {
                 NativeMethods.DeleteProcThreadAttributeList(siEx.lpAttributeList);
@@ -262,7 +313,7 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
                 siEx.lpAttributeList = IntPtr.Zero;
             }
 
-            // 关闭管道 write 端（子进程已通过句柄继承持有副本）
+            // 关闭管道 write 端（子进程通过句柄继承持有副本）
             stdoutWrite.Dispose();
             stdoutWrite = null!;
             stderrWrite.Dispose();
@@ -280,65 +331,55 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
             hThread = procInfo.hThread;
             pid = procInfo.dwProcessId;
 
-            // ── 5. Layer 1: 移除特权（在挂起态操作 token）──
-            if (NativeMethods.OpenProcessToken(hProcess,
-                NativeMethods.TOKEN_ADJUST_PRIVILEGES | NativeMethods.TOKEN_QUERY,
-                out IntPtr hToken))
+            // ── 5. 可选加固: Job Object + IOCP ──
+            if (harden)
             {
-                try
+                iocpHandle = NativeMethods.CreateIoCompletionPort(
+                    (IntPtr)(-1), IntPtr.Zero, IntPtr.Zero, 1);
+                if (iocpHandle == IntPtr.Zero || iocpHandle == (IntPtr)(-1))
+                    throw new InvalidOperationException($"CreateIoCompletionPort 失败 (句柄={iocpHandle}): {Marshal.GetLastWin32Error()}");
+
+                if (!CreateJobWithLimits(out newJobHandle, iocpHandle))
+                    throw new InvalidOperationException("Job Object 创建失败。");
+
+                // 关闭旧 Job（如果存在）
+                _jobHandle?.Dispose();
+                _jobHandle = newJobHandle;
+
+                if (!NativeMethods.AssignProcessToJobObject(_jobHandle, hProcess))
                 {
-                    foreach (var priv in NativeMethods.PrivilegesToRemove)
+                    int err = Marshal.GetLastWin32Error();
+                    _notification?.AppendLog(
+                        $"EiTRVO Firewall: AssignProcessToJobObject 失败 (错误码 {err})，子进程监控不可用！",
+                        EiTRVO.ProEngine.Models.NotificationType.Error);
+                }
+                else
+                {
+                    // 硬验证：确认 javaw.exe 确实在 Job 中
+                    if (NativeMethods.IsProcessInJob(hProcess, _jobHandle, out bool inJob))
                     {
-                        if (NativeMethods.LookupPrivilegeValue(null, priv, out var luid))
-                        {
-                            var tp = new NativeMethods.TOKEN_PRIVILEGES
-                            {
-                                PrivilegeCount = 1,
-                                Privileges = new NativeMethods.LUID_AND_ATTRIBUTES
-                                {
-                                    Luid = luid,
-                                    Attributes = NativeMethods.SE_PRIVILEGE_REMOVED
-                                }
-                            };
-                            NativeMethods.AdjustTokenPrivileges(
-                                hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
-                        }
+                        _notification?.AppendLog(
+                            inJob
+                                ? "EiTRVO Firewall: IsProcessInJob 确认 javaw.exe 在 Job 中"
+                                : "EiTRVO Firewall: IsProcessInJob 返回 false！javaw.exe 不在 Job 中！",
+                            inJob
+                                ? EiTRVO.ProEngine.Models.NotificationType.Info
+                                : EiTRVO.ProEngine.Models.NotificationType.Error);
                     }
                 }
-                finally { NativeMethods.CloseHandle(hToken); }
+
+                // 启动 IOCP 工作线程（在 ResumeThread 之前，消除竞态窗口）
+                StartIocpThread(iocpHandle);
+                _iocpHandle = iocpHandle;
+                iocpHandle = IntPtr.Zero; // 所有权转移
             }
 
-            // ── 6. Layer 2: Job Object ──
-            _jobHandle = NativeMethods.CreateJobObject(IntPtr.Zero, null);
-            if (!_jobHandle.IsInvalid)
-            {
-                var limits = new NativeMethods.JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
-                limits.BasicLimitInformation.LimitFlags =
-                    NativeMethods.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
-                    NativeMethods.JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
-                limits.BasicLimitInformation.ActiveProcessLimit = 50;
-
-                int limSize = Marshal.SizeOf<NativeMethods.JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
-                IntPtr ptr = Marshal.AllocHGlobal(limSize);
-                try
-                {
-                    Marshal.StructureToPtr(limits, ptr, false);
-                    NativeMethods.SetInformationJobObject(
-                        _jobHandle,
-                        NativeMethods.JOBOBJECTINFOCLASS.JobObjectExtendedLimitInformation,
-                        ptr, (uint)limSize);
-                }
-                finally { Marshal.FreeHGlobal(ptr); }
-
-                NativeMethods.AssignProcessToJobObject(_jobHandle, hProcess);
-            }
-
-            // ── 7. ResumeThread —— 进程开始执行，Layer 0/1/2 全部就位 ──
+            // ── 6. ResumeThread —— 进程开始执行 ──
             uint suspendCount = NativeMethods.ResumeThread(hThread);
-            if (suspendCount == uint.MaxValue) // (DWORD)-1 = failure
+            if (suspendCount == uint.MaxValue)
                 throw new InvalidOperationException($"ResumeThread 失败: {Marshal.GetLastWin32Error()}");
 
-            // ── 8. 清理 hProcess / hThread，构建托管 Process 对象 ──
+            // ── 7. 清理 hProcess / hThread，构建托管 Process ──
             NativeMethods.CloseHandle(hThread);
             hThread = IntPtr.Zero;
             NativeMethods.CloseHandle(hProcess);
@@ -346,9 +387,7 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
 
             process = Process.GetProcessById(pid);
 
-            // ── 9. 构建 StreamReader ──
-            // 匿名管道 (CreatePipe) 不支持 Overlapped I/O，必须用同步模式。
-            // StreamReader.ReadLineAsync() 在同步 FileStream 上会自动退化为线程池模拟异步。
+            // ── 8. 构建 StreamReader（isAsync: false，匿名管道不支持 Overlapped I/O）──
             var stdoutStream = new FileStream(stdoutRead, FileAccess.Read, bufferSize: 4096, isAsync: false);
             var stderrStream = new FileStream(stderrRead, FileAccess.Read, bufferSize: 4096, isAsync: false);
             var stdoutReader = new StreamReader(stdoutStream, System.Text.Encoding.UTF8);
@@ -365,31 +404,24 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         }
         catch
         {
-            // 错误清理：终止进程 + 关闭所有句柄
-            // hProcess 在 ResumeThread+CloseHandle 成功后已置零，此时需通过 PID 终止已恢复的进程
             if (hThread != IntPtr.Zero)
                 NativeMethods.CloseHandle(hThread);
             if (hProcess != IntPtr.Zero)
             {
-                // 进程仍在挂起态：直接 TerminateProcess
                 NativeMethods.TerminateProcess(hProcess, 1);
                 NativeMethods.CloseHandle(hProcess);
             }
             else if (pid != 0)
             {
-                // 进程已恢复执行（ResumeThread 成功但后续步骤失败）：通过 PID 强制终止
-                try
-                {
-                    using var runaway = Process.GetProcessById(pid);
-                    runaway.Kill();
-                }
-                catch { /* 进程可能已自行退出 */ }
+                try { using var runaway = Process.GetProcessById(pid); runaway.Kill(); } catch { }
             }
             process?.Dispose();
             stdoutRead?.Dispose();
             stderrRead?.Dispose();
             if (stdoutWrite != null) stdoutWrite.Dispose();
             if (stderrWrite != null) stderrWrite.Dispose();
+            if (iocpHandle != IntPtr.Zero) NativeMethods.CloseHandle(iocpHandle);
+            newJobHandle?.Dispose();
             throw;
         }
     }
@@ -453,142 +485,177 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         sb.Append('"');
     }
 
-    // ==================== Layer 3 ====================
+    // ==================== Layer 3: IOCP 子进程监控 ====================
 
-    public void StartMonitoring(Process parentProcess, Action<string, int, string?> onThreatDetected)
+    // IOCP 是唯一拦截源——内核在 CreateProcess 路径上同步推送 JOB_OBJECT_MSG_NEW_PROCESS，微秒级延迟。
+    // 命令行通过 NtQueryInformationProcess(ProcessCommandLineInformation) 按需获取，不依赖 WMI。
+
+    /// <summary>启动 IOCP 后台工作线程。</summary>
+    private void StartIocpThread(IntPtr iocpHandle)
     {
-        _parentPid = parentProcess.Id;
-        _onThreat = onThreatDetected;
+        _iocpCts = new CancellationTokenSource();
+        var ct = _iocpCts.Token;
+        IntPtr port = iocpHandle;
 
-        try
+        _iocpThread = new Thread(() =>
         {
-            var query = new WqlEventQuery(
-                "__InstanceCreationEvent",
-                TimeSpan.FromSeconds(1),
-                "TargetInstance ISA 'Win32_Process'");
+            while (!ct.IsCancellationRequested)
+            {
+                bool ok = NativeMethods.GetQueuedCompletionStatus(
+                    port,
+                    out uint msgId,
+                    out IntPtr key,
+                    out IntPtr overlapped,
+                    500);
 
-            _watcher = new ManagementEventWatcher(query);
-            _watcher.EventArrived += OnProcessStarted;
-            _watcher.Start();
-        }
-        catch
+                if (!ok)
+                {
+                    // WAIT_TIMEOUT (258) → 继续循环
+                    if (Marshal.GetLastWin32Error() == 258) continue;
+                    // 其他错误 → 退出
+                    break;
+                }
+
+                if (msgId == NativeMethods.IOCP_QUIT_KEY)
+                    break;
+
+                // JOB_OBJECT_MSG 的 PID 存在 lpOverlapped 里，不是 lpCompletionKey
+                uint pid = (uint)(ulong)overlapped;
+
+                if (msgId == NativeMethods.JOB_OBJECT_MSG_NEW_PROCESS)
+                    HandleNewProcess(pid);
+                else if (msgId == NativeMethods.JOB_OBJECT_MSG_EXIT_PROCESS)
+                    HandleNewProcessExit(pid);
+                // ACTIVE_PROCESS_ZERO 等其他消息忽略
+            }
+        })
         {
-            // WMI 不可用时静默失败 —— Layer 1 + 2 仍然生效
-            _notification?.AppendLog(
-                "EiTRVO 防火墙部分防护层不可用（WMI 服务异常），子进程监控、文件系统监控和网络监控已降级",
-                EiTRVO.ProEngine.Models.NotificationType.Warning);
-        }
-
-        // 独立于 WMI 的进程树快照兜底：立即扫描一次，之后每 2s 轮询
-        ScanProcessTree();
-        _procTreeTimer = new System.Threading.Timer(
-            _ => ScanProcessTree(), null, 2000, 2000);
+            IsBackground = true,
+            Name = "EiTRVO-IOCP"
+        };
+        _iocpThread.Start();
     }
 
-    private void OnProcessStarted(object sender, EventArrivedEventArgs e)
+    /// <summary>停止 IOCP 工作线程并关闭端口。</summary>
+    private void StopIocpThread()
+    {
+        // 1. 发退出信号
+        if (_iocpCts != null)
+        {
+            _iocpCts.Cancel();
+        }
+
+        // 2. 唤醒阻塞中的 GetQueuedCompletionStatus
+        if (_iocpHandle != IntPtr.Zero)
+        {
+            NativeMethods.PostQueuedCompletionStatus(
+                _iocpHandle,
+                NativeMethods.IOCP_QUIT_KEY,
+                IntPtr.Zero,
+                IntPtr.Zero);
+        }
+
+        // 3. 等待线程退出
+        if (_iocpThread?.IsAlive == true)
+        {
+            _iocpThread.Join(2000);
+        }
+        _iocpThread = null;
+
+        _iocpCts?.Dispose();
+        _iocpCts = null;
+
+        // 4. 关闭 IOCP 端口
+        if (_iocpHandle != IntPtr.Zero)
+        {
+            NativeMethods.CloseHandle(_iocpHandle);
+            _iocpHandle = IntPtr.Zero;
+        }
+    }
+
+    /// <summary>IOCP 回调：处理进程退出 Job 的消息。（当前仅用于资源清理，不需要额外处理）</summary>
+    private void HandleNewProcessExit(uint pid)
+    {
+        // 命令行缓存清理等资源回收可在此扩展
+    }
+
+    /// <summary>IOCP 回调：处理新进程加入 Job 的消息。</summary>
+    private void HandleNewProcess(uint pid)
     {
         try
         {
-            var target = (ManagementBaseObject)e.NewEvent["TargetInstance"];
-            string name = (string)target["Name"];
-            uint parentPid = (uint)target["ParentProcessId"];
-            uint pid = (uint)target["ProcessId"];
-
-            if (parentPid == _parentPid && Blocklist.Contains(name))
+            string? procName;
+            try
             {
-                // 抓取命令行（事后 WMI 查询，同用户进程无需管理员权限）
-                string? commandLine = null;
-                try
-                {
-                    using var searcher = new ManagementObjectSearcher(
-                        $"SELECT CommandLine FROM Win32_Process WHERE ProcessId = {pid}");
-                    using var results = searcher.Get();
-                    foreach (var obj in results)
-                    {
-                        commandLine = obj["CommandLine"]?.ToString();
-                        break;
-                    }
-                }
-                catch { /* WMI 查询失败不影响熔断 */ }
-
-                // 立即杀子进程
-                try { Process.GetProcessById((int)pid)?.Kill(); } catch { }
-
-                _onThreat?.Invoke(name, (int)pid, commandLine);
+                using var proc = Process.GetProcessById((int)pid);
+                procName = (proc.ProcessName ?? "") + ".exe";
             }
+            catch { return; } // 进程已退出
+
+            if (!Blocklist.Contains(Path.GetFileName(procName)))
+                return;
+
+            // 立即杀子进程
+            try { Process.GetProcessById((int)pid)?.Kill(); } catch { }
+
+            string? commandLine = GetProcessCommandLine((int)pid);
+            _onThreat?.Invoke(procName, (int)pid, commandLine);
         }
         catch { }
     }
 
-    // ==================== 进程树快照（WMI 兜底） ====================
-
-    /// <summary>
-    /// 用 Toolhelp32 快照递归扫描游戏进程的**全部后代进程**，命中黑名单即触发熔断。
-    /// 不依赖 WMI，不需要管理员权限。
-    /// </summary>
-    private void ScanProcessTree()
+    /// <summary>通过 NtQueryInformationProcess 获取进程命令行，不需要管理员权限。</summary>
+    private static string? GetProcessCommandLine(int pid)
     {
-        if (_parentPid == 0 || _onThreat == null) return;
+        IntPtr hProcess = NativeMethods.OpenProcess(
+            NativeMethods.PROCESS_QUERY_INFORMATION | NativeMethods.PROCESS_VM_READ,
+            false, pid);
+        if (hProcess == IntPtr.Zero) return null;
 
         try
         {
-            // 1. 获取全系统进程快照
-            IntPtr snapshot = NativeMethods.CreateToolhelp32Snapshot(
-                NativeMethods.TH32CS_SNAPPROCESS, 0);
-            if (snapshot == IntPtr.Zero || snapshot == (IntPtr)(-1)) return;
+            uint returnLength;
+            int status = NativeMethods.NtQueryInformationProcess(
+                hProcess,
+                NativeMethods.ProcessCommandLineInformation,
+                IntPtr.Zero, 0,
+                out returnLength);
 
+            if (returnLength == 0 || returnLength > 32768) return null;
+
+            IntPtr buffer = Marshal.AllocHGlobal((int)returnLength);
             try
             {
-                // 2. 构建 parent → children 映射（只收集一次，递归时查表）
-                var children = new Dictionary<int, List<(string Name, int Pid)>>();
-                var entry = new NativeMethods.PROCESSENTRY32();
-                entry.dwSize = Marshal.SizeOf<NativeMethods.PROCESSENTRY32>();
+                status = NativeMethods.NtQueryInformationProcess(
+                    hProcess,
+                    NativeMethods.ProcessCommandLineInformation,
+                    buffer, returnLength,
+                    out _);
+                if (status != 0) return null;
 
-                if (NativeMethods.Process32First(snapshot, ref entry))
-                {
-                    do
-                    {
-                        int ppid = entry.th32ParentProcessID;
-                        if (!children.ContainsKey(ppid))
-                            children[ppid] = new List<(string, int)>();
-                        children[ppid].Add((entry.szExeFile, entry.th32ProcessID));
-                    }
-                    while (NativeMethods.Process32Next(snapshot, ref entry));
-                }
+                var us = Marshal.PtrToStructure<NativeMethods.UNICODE_STRING>(buffer);
+                if (us.Buffer == IntPtr.Zero || us.Length == 0) return null;
 
-                // 3. 递归遍历：以 _parentPid 为根的整个进程树
-                var visited = new HashSet<int> { _parentPid };
-                var queue = new Queue<int>();
-                queue.Enqueue(_parentPid);
-
-                while (queue.Count > 0)
-                {
-                    int current = queue.Dequeue();
-                    if (!children.TryGetValue(current, out var kids)) continue;
-
-                    foreach (var (name, pid) in kids)
-                    {
-                        if (!visited.Add(pid)) continue;
-
-                        string fileName = Path.GetFileName(name);
-                        if (Blocklist.Contains(fileName))
-                        {
-                            // 立即杀子进程
-                            try { Process.GetProcessById(pid)?.Kill(); } catch { }
-                            _onThreat?.Invoke(name, pid, null);
-                            return; // 命中即停止本次扫描
-                        }
-
-                        queue.Enqueue(pid);
-                    }
-                }
+                return Marshal.PtrToStringUni(us.Buffer, us.Length / 2);
             }
             finally
             {
-                NativeMethods.CloseHandle(snapshot);
+                Marshal.FreeHGlobal(buffer);
             }
         }
-        catch { /* 快照扫描失败不阻塞 WMI 路径 */ }
+        catch { return null; }
+        finally
+        {
+            NativeMethods.CloseHandle(hProcess);
+        }
+    }
+
+    // ==================== 监控生命周期 ====================
+
+    /// <summary>IOCP 线程已在 ResumeThread 前启动，此方法仅注册熔断回调。</summary>
+    public void StartMonitoring(Process parentProcess, Action<string, int, string?> onThreatDetected)
+    {
+        _onThreat = onThreatDetected;
     }
 
     public void TerminateJobProcesses()
@@ -599,16 +666,10 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
 
     public void StopMonitoring()
     {
-        _procTreeTimer?.Dispose();
-        _procTreeTimer = null;
+        // 先清回调，防止 IOCP 线程在停止期间调 _onThreat
+        _onThreat = null;
 
-        try
-        {
-            _watcher?.Stop();
-            _watcher?.Dispose();
-        }
-        catch { }
-        _watcher = null;
+        StopIocpThread();
     }
 
     // ==================== Layer 4 + 5: 高级防御 ====================

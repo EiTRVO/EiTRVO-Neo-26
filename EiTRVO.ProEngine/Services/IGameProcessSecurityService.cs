@@ -12,17 +12,16 @@ namespace EiTRVO.ProEngine.Services;
 /// </summary>
 public interface IGameProcessSecurityService : IDisposable
 {
-    /// <summary>对已启动的游戏进程实施 Layer 1（移除 SeShutdownPrivilege）+ Layer 2（Job Object）加固</summary>
-    void HardenProcess(Process process);
-
     /// <summary>
-    /// 用 CREATE_SUSPENDED 创建进程 → Layer 0/1/2 加固 → ResumeThread → 返回进程句柄。
+    /// 用 CREATE_SUSPENDED 创建进程 → 管道创建（isAsync:false）→ Layer 0/1/2 加固 → ResumeThread → 返回进程句柄。
+    /// 当 harden=false 时跳过 Layer 0（扩展点禁用）和 Layer 1+2（Job Object），但仍使用显式管道控制。
     /// 仅 Windows 实现支持；非 Windows 平台返回 null。
     /// </summary>
     HardenedProcessHandle? StartSuspendedAndHarden(
         string fileName,
         IReadOnlyList<string> arguments,
-        string workingDirectory);
+        string workingDirectory,
+        bool harden = true);
 
     /// <summary>启动 Layer 3 子进程黑名单监控。回调在检测到黑名单进程时触发，commandLine 为捕获到的完整命令行</summary>
     void StartMonitoring(Process parentProcess, Action<string, int, string?> onThreatDetected);

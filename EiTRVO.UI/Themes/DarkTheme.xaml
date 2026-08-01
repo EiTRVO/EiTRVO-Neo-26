@@ -751,4 +751,63 @@
         </Setter>
     </Style>
 
+    <!-- ============================ -->
+    <!-- RadioButton Style            -->
+    <!-- ============================ -->
+
+    <Style TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="UseLayoutRounding" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border Background="Transparent"
+                            Padding="2,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- Indicator circle -->
+                            <Grid Grid.Column="0"
+                                  Width="16" Height="16"
+                                  VerticalAlignment="Center">
+                                <!-- Outer circle (unchecked ring) -->
+                                <Ellipse x:Name="OuterCircle"
+                                         Width="16" Height="16"
+                                         Stroke="{DynamicResource TextMuted}"
+                                         StrokeThickness="1.5"
+                                         Fill="Transparent"/>
+                                <!-- Inner dot (checked fill) -->
+                                <Ellipse x:Name="CheckMark"
+                                         Width="8" Height="8"
+                                         Fill="{DynamicResource AccentBlue}"
+                                         Opacity="0"/>
+                            </Grid>
+                            <ContentPresenter Grid.Column="1"
+                                              Margin="6,0,0,0"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckMark" Property="Opacity" Value="1"/>
+                            <Setter TargetName="OuterCircle" Property="Stroke" Value="{DynamicResource AccentBlue}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="OuterCircle" Property="Stroke" Value="{DynamicResource AccentBlue}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+                            <Setter TargetName="OuterCircle" Property="Stroke" Value="{DynamicResource TextMuted}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>
