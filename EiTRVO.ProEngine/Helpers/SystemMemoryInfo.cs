@@ -43,6 +43,15 @@ public static class SystemMemoryInfo
         Math.Clamp((int)(TotalPhysicalMB * 0.70), 2048, 32768);
 
     /// <summary>
+    /// Slider soft cap: 70% of total RAM capped at 16 GB (16384 MB).
+    /// Prevents the slider's rightmost ticks from bunching up at
+    /// unnecessarily high values while still allowing manual input
+    /// beyond the cap.
+    /// </summary>
+    public static int SliderMaxMemoryMB =>
+        Math.Min(RecommendedMaxMemoryMB, 16384);
+
+    /// <summary>
     /// Recommended default Minecraft memory allocation: 20% of total RAM,
     /// clamped to [2048, 8192] MB.
     /// </summary>

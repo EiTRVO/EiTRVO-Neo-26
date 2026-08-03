@@ -23,6 +23,12 @@ public interface IGameProcessSecurityService : IDisposable
         string workingDirectory,
         bool harden = true);
 
+    /// <summary>启动前预计算黑名单文件哈希缓存，用于反制改名/复制绕过。</summary>
+    void InitializeBlacklistHashes();
+
+    /// <summary>删除本地哈希缓存文件（Firewall 关闭时调用）。</summary>
+    void DeleteBlacklistHashCache();
+
     /// <summary>启动 Layer 3 子进程黑名单监控。回调在检测到黑名单进程时触发，commandLine 为捕获到的完整命令行</summary>
     void StartMonitoring(Process parentProcess, Action<string, int, string?> onThreatDetected);
 

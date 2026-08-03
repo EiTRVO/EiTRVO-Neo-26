@@ -143,6 +143,55 @@ internal static class NativeMethods
         uint ProcessInformationLength,
         out uint ReturnLength);
 
+    // ==================== Wintrust (Authenticode) ====================
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct WINTRUST_FILE_INFO
+    {
+        public uint cbStruct;
+        public IntPtr pcwszFilePath;
+        public IntPtr hFile;
+        public IntPtr pgKnownSubject;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct WINTRUST_DATA
+    {
+        public uint cbStruct;
+        public IntPtr pPolicyCallbackData;
+        public IntPtr pSIPClientData;
+        public uint dwUIChoice;
+        public uint fdwRevocationChecks;
+        public uint dwUnionChoice;
+        public IntPtr psFileOrBlob;           // WINTRUST_FILE_INFO*
+        public uint dwStateAction;
+        public IntPtr hWVTStateData;
+        public IntPtr pwszURLReference;
+        public uint dwProvFlags;
+        public uint dwUIContext;
+        public IntPtr pSignatureSettings;
+    }
+
+    [DllImport("wintrust.dll", CharSet = CharSet.Unicode)]
+    public static extern uint WinVerifyTrust(
+        IntPtr hwnd,
+        [MarshalAs(UnmanagedType.LPStruct)] Guid pgActionID,
+        ref WINTRUST_DATA pWVTData);
+
+    // WinVerifyTrust constants
+    public const uint WTD_UI_NONE = 2;
+    public const uint WTD_REVOKE_NONE = 0x00000000;
+    public const uint WTD_CHOICE_FILE = 1;
+    public const uint WTD_STATEACTION_IGNORE = 0x00000000;
+    public const uint WTD_STATEACTION_VERIFY = 1;
+    public const uint WTD_STATEACTION_CLOSE = 2;
+    public const uint WTD_SAFER_FLAG = 0x00000100;
+    public const uint WTD_PROV_FLAGS_MASK = 0x0000FFFF;
+    // Authenticode GUID: WINTRUST_ACTION_GENERIC_VERIFY_V2
+    // {00AAC56B-CD44-11d0-8CC2-00C04FC295EE}
+    public static readonly Guid WINTRUST_ACTION_GENERIC_VERIFY_V2 = new(
+        0x00aac56b, 0xcd44, 0x11d0, 0x8c, 0xc2, 0x00, 0xc0, 0x4f, 0xc2, 0x95, 0xee);
+
     // ==================== Advapi32 ====================
 
     [DllImport("advapi32.dll", SetLastError = true)]

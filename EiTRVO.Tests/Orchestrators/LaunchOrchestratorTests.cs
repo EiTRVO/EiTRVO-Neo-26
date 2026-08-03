@@ -791,6 +791,79 @@ public class LaunchOrchestratorTests : IDisposable
     // ================================================================
     // Helpers
     // ================================================================
+    // BuildLaunchArgs — joptsimple required option (--userProperties) guarantee
+    // ================================================================
+
+    private const string Legacy1_7_10Arguments =
+        "--username ${auth_player_name} --version ${version_name} --gameDir ${game_directory} " +
+        "--assetsDir ${assets_root} --assetIndex ${assets_index_name} --uuid ${auth_uuid} " +
+        "--accessToken ${auth_access_token} --userProperties ${user_properties} --userType ${user_type}";
+
+    [TestMethod]
+    public void BuildLaunchArgs_LegacyStrippedJson_AppendsUserProperties()
+    {
+        // 模拟从其他启动器导入/被裁剪的版本 JSON：minecraftArguments 有 ${user_properties}
+        // 但 --userProperties 键缺失（这正是 Missing required option(s) ['userProperties'] 的成因）
+        var detail = CreateMinimalDetail();
+        detail.MinecraftArguments = Legacy1_7_10Arguments.Replace("--userProperties ", "");
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.7.10", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "msa");
+
+        int idx = args.LastIndexOf("--userProperties");
+        Assert.IsTrue(idx >= 0, "缺失的 --userProperties 应被补全");
+        Assert.AreEqual("{}", args[idx + 1]);
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_LegacyFullJson_KeepsUserPropertiesUnchanged()
+    {
+        var detail = CreateMinimalDetail();
+        detail.MinecraftArguments = Legacy1_7_10Arguments;
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.7.10", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "msa");
+
+        var flags = args.Where(a => a == "--userProperties").ToList();
+        Assert.AreEqual(1, flags.Count, "完整 JSON 不应重复注入 --userProperties");
+        Assert.AreEqual("{}", args[args.LastIndexOf("--userProperties") + 1]);
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_LegacyNoUserProperties_NotInjected()
+    {
+        // ≤1.5.2 的 Main 不识别 --userProperties，注入反而会抛 UnrecognizedOptionException
+        var detail = CreateMinimalDetail();
+        detail.MinecraftArguments =
+            "${auth_player_name} ${auth_session} --gameDir ${game_directory} --assetsDir ${game_assets}";
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.5.2", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "mojang");
+
+        CollectionAssert.DoesNotContain(args, "--userProperties");
+    }
+
+    [TestMethod]
+    public void BuildLaunchArgs_UserPropertiesFlagWithoutValue_InsertsValue()
+    {
+        // 键存在但值丢失（占位符缺失）同样会导致启动失败，应补上默认值 {}
+        var detail = CreateMinimalDetail();
+        detail.MinecraftArguments = Legacy1_7_10Arguments
+            .Replace("--userProperties ${user_properties}", "--userProperties");
+
+        var args = _orchestrator.BuildLaunchArgs(detail, "1.7.10", _tempGameDir,
+            "Player", "release", "token", "uuid-123",
+            memory: 2048, targetJava: 21, width: null, height: null, "msa");
+
+        int idx = args.LastIndexOf("--userProperties");
+        Assert.IsTrue(idx >= 0);
+        Assert.AreEqual("{}", args[idx + 1]);
+    }
+
+    // ================================================================
 
     private VersionDetail CreateMinimalDetail()
     {

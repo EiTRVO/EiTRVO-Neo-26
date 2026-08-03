@@ -751,7 +751,42 @@ public class LaunchOrchestrator
             args.AddRange(PlaceholderHelper.SplitMinecraftArguments(gameArgs));
         }
 
+        // === joptsimple 必需项兜底（1.7.6 ~ 1.12.x 的 Main 将 --userProperties 声明为 required） ===
+        // 若版本 JSON 声明了 ${user_properties} 但构建出的参数缺失该键（从其他启动器导入、被裁剪的
+        // 版本 JSON 或缓存损坏都会导致），游戏会以 Missing required option(s) ['userProperties']
+        // 直接退出。此处按声明补全为官方启动器默认值 {}，保证必需参数始终完整。
+        EnsureUserPropertiesArg(args, detail);
+
         return args;
+    }
+
+    /// <summary>
+    /// 确保 joptsimple 必需项 --userProperties 存在且带值。
+    /// 键存在但缺值（被裁剪的 JSON）→ 补默认值；键完全缺失时，仅当版本 JSON 声明了
+    /// ${user_properties} 占位符（即对应版本的 Main 要求该参数）才补全整个键值对，
+    /// 避免给不识别该参数的旧版本（如 ≤1.5.2）注入多余选项导致 UnrecognizedOptionException。
+    /// </summary>
+    private static void EnsureUserPropertiesArg(List<string> args, VersionDetail detail)
+    {
+        bool declared =
+            detail.MinecraftArguments?.Contains("${user_properties}", StringComparison.Ordinal) == true
+            || (detail.Arguments?.Game is { Count: > 0 } gameArgs
+                && gameArgs.Any(e => e.ValueKind == JsonValueKind.String
+                                     && (e.GetString() ?? "").Contains("${user_properties}", StringComparison.Ordinal)));
+
+        int idx = args.LastIndexOf("--userProperties");
+        if (idx >= 0)
+        {
+            // 键存在但缺值（后随其他选项或位于末尾）→ 补默认值 {}
+            if (idx + 1 >= args.Count || args[idx + 1].StartsWith('-'))
+                args.Insert(idx + 1, "{}");
+        }
+        else if (declared)
+        {
+            // 版本声明了该必需参数但键缺失（导入/裁剪的 JSON）→ 补全整个键值对
+            args.Add("--userProperties");
+            args.Add("{}");
+        }
     }
 
     // ==================== Mods Integrity ====================
@@ -897,6 +932,8 @@ public class LaunchOrchestrator
         // === EiTRVO Firewall Layer 3 (IOCP 监控) ===
         if (_gameSecurity != null && firewallEnabled)
         {
+            // 游戏启动前刷新哈希缓存（启动器打开期间可能有 Windows Update 更新系统文件）
+            _gameSecurity.InitializeBlacklistHashes();
             _notificationService.AppendLog(
                 "EiTRVO Firewall 已启用（标准防御），子进程监控已启动。",
                 NotificationType.Info);
@@ -1122,7 +1159,8 @@ public class LaunchOrchestrator
         var sanitized = new List<string>(args.Count);
         for (int i = 0; i < args.Count; i++)
         {
-            if ((args[i] == "--accessToken" || args[i] == "--uuid") && i + 1 < args.Count)
+            if ((args[i] == "--accessToken" || args[i] == "--uuid") && i + 1 < args.Count
+                && !args[i + 1].StartsWith('-'))
             {
                 sanitized.Add(args[i]);
                 sanitized.Add("***REDACTED***");

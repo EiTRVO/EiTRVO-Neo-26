@@ -1,8 +1,12 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using EiTRVO.ProEngine.Orchestrators;
@@ -45,6 +49,29 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         // 任务管理
         "taskkill.exe",
     };
+
+    // ── 反改名：黑名单文件 System32/SysWOW64 路径 → 支持 32/64 位双副本 ──
+    private static readonly Dictionary<string, string[]> BlocklistPathMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["cmd.exe"] = new[] { @"C:\Windows\System32\cmd.exe", @"C:\Windows\SysWOW64\cmd.exe" },
+        ["powershell.exe"] = new[] { @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", @"C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe" },
+        ["pwsh.exe"] = new[] { @"C:\Program Files\PowerShell\7\pwsh.exe" },
+        ["msbuild.exe"] = new[] { @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe", @"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe" },
+        ["cscript.exe"] = new[] { @"C:\Windows\System32\cscript.exe", @"C:\Windows\SysWOW64\cscript.exe" },
+        ["wscript.exe"] = new[] { @"C:\Windows\System32\wscript.exe", @"C:\Windows\SysWOW64\wscript.exe" },
+        ["mshta.exe"] = new[] { @"C:\Windows\System32\mshta.exe", @"C:\Windows\SysWOW64\mshta.exe" },
+        ["rundll32.exe"] = new[] { @"C:\Windows\System32\rundll32.exe", @"C:\Windows\SysWOW64\rundll32.exe" },
+    };
+    // 未在上表中出现的 blocklist 条目默认走 System32/ 查找
+    private static readonly string SystemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+
+    // ── 反改名: SHA-256 哈希缓存 ──
+    // 文件名（小写） → 文件 SHA-256 hex
+    private readonly ConcurrentDictionary<string, string> _hashCache = new(StringComparer.OrdinalIgnoreCase);
+    // 持久化缓存文件路径
+    private static string CacheFilePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "EiTRVO", "blacklist_hash_cache.dat");
 
     private SafeFileHandle? _jobHandle;
 
@@ -573,6 +600,199 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         }
     }
 
+    // ==================== 反改名：黑名单哈希预缓存 ====================
+
+    /// <summary>
+    /// 启动前调用：遍历 blocklist 的 System32/SysWOW64 路径，预计算 SHA-256。
+    /// 以 LastWriteTime 判断是否需要刷新，缓存通过 DPAPI 持久化。
+    /// </summary>
+    public void InitializeBlacklistHashes()
+    {
+        try
+        {
+            // 尝试加载持久化缓存
+            var diskCache = LoadCacheFromDisk();
+
+            foreach (string name in Blocklist)
+            {
+                string[] paths = BlocklistPathMap.TryGetValue(name, out var mapped)
+                    ? mapped
+                    : new[] { Path.Combine(SystemDir, name) };
+
+                foreach (string path in paths)
+                {
+                    if (!File.Exists(path)) continue;
+
+                    long lastWrite = File.GetLastWriteTimeUtc(path).Ticks;
+                    // 缓存命中且 LastWriteTime 未变 → 复用
+                    if (diskCache.TryGetValue(name, out var entry)
+                        && entry.LastWriteTimeUtc == lastWrite)
+                    {
+                        _hashCache[name] = entry.Sha256;
+                    }
+                    else
+                    {
+                        string sha = ComputeSha256(path);
+                        if (!string.IsNullOrEmpty(sha))
+                        {
+                            _hashCache[name] = sha;
+                            diskCache[name] = new BlacklistCacheEntry
+                            {
+                                FileName = name,
+                                Sha256 = sha,
+                                LastWriteTimeUtc = lastWrite
+                            };
+                        }
+                    }
+                    break; // 第一个存在的路径即为权威来源
+                }
+            }
+
+            SaveCacheToDisk(diskCache);
+
+            _notification?.AppendLog(
+                $"EiTRVO Firewall: 黑名单哈希缓存已就绪（{_hashCache.Count} 条）",
+                EiTRVO.ProEngine.Models.NotificationType.Info);
+        }
+        catch (Exception ex)
+        {
+            _notification?.AppendLog(
+                $"EiTRVO Firewall: 哈希缓存初始化失败，退化为纯文件名匹配: {ex.Message}",
+                EiTRVO.ProEngine.Models.NotificationType.Warning);
+            _hashCache.Clear();
+        }
+    }
+
+    /// <summary>删除本地哈希缓存文件（Firewall 关闭时调用）。</summary>
+    public void DeleteBlacklistHashCache()
+    {
+        _hashCache.Clear();
+        try { if (File.Exists(CacheFilePath)) File.Delete(CacheFilePath); } catch { }
+    }
+
+    /// <summary>计算文件 SHA-256 hex（小写），异常时返回空字符串。</summary>
+    private static string ComputeSha256(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536);
+            byte[] hash = SHA256.HashData(stream);
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    // ── DPAPI 持久化 ──
+
+    private static Dictionary<string, BlacklistCacheEntry> LoadCacheFromDisk()
+    {
+        try
+        {
+            if (!File.Exists(CacheFilePath)) return new(StringComparer.OrdinalIgnoreCase);
+            byte[] encrypted = File.ReadAllBytes(CacheFilePath);
+            byte[] plain = System.Security.Cryptography.ProtectedData.Unprotect(
+                encrypted, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            var list = JsonSerializer.Deserialize<List<BlacklistCacheEntry>>(plain);
+            return list?.ToDictionary(e => e.FileName, StringComparer.OrdinalIgnoreCase)
+                   ?? new(StringComparer.OrdinalIgnoreCase);
+        }
+        catch { return new(StringComparer.OrdinalIgnoreCase); }
+    }
+
+    private static void SaveCacheToDisk(Dictionary<string, BlacklistCacheEntry> cache)
+    {
+        try
+        {
+            string dir = Path.GetDirectoryName(CacheFilePath)!;
+            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            var list = cache.Values.ToList();
+            byte[] plain = JsonSerializer.SerializeToUtf8Bytes(list);
+            byte[] encrypted = System.Security.Cryptography.ProtectedData.Protect(
+                plain, null, System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            // 如果上次写入后已加 ReadOnly 属性，先移除
+            if (File.Exists(CacheFilePath))
+                File.SetAttributes(CacheFilePath, FileAttributes.Normal);
+            File.WriteAllBytes(CacheFilePath, encrypted);
+            File.SetAttributes(CacheFilePath, FileAttributes.ReadOnly | FileAttributes.Hidden);
+        }
+        catch { /* 缓存写入失败不阻塞 */ }
+    }
+
+    /// <summary>WinVerifyTrust 检查文件是否有有效微软 Authenticode 签名。</summary>
+    private static bool IsMicrosoftSigned(string path)
+    {
+        try
+        {
+            var fileInfo = new NativeMethods.WINTRUST_FILE_INFO
+            {
+                cbStruct = (uint)Marshal.SizeOf<NativeMethods.WINTRUST_FILE_INFO>(),
+                pcwszFilePath = Marshal.StringToHGlobalUni(path),
+                hFile = IntPtr.Zero,
+                pgKnownSubject = IntPtr.Zero
+            };
+
+            var fileInfoPtr = Marshal.AllocHGlobal(Marshal.SizeOf<NativeMethods.WINTRUST_FILE_INFO>());
+            Marshal.StructureToPtr(fileInfo, fileInfoPtr, false);
+
+            var trustData = new NativeMethods.WINTRUST_DATA
+            {
+                cbStruct = (uint)Marshal.SizeOf<NativeMethods.WINTRUST_DATA>(),
+                pPolicyCallbackData = IntPtr.Zero,
+                pSIPClientData = IntPtr.Zero,
+                dwUIChoice = NativeMethods.WTD_UI_NONE,
+                fdwRevocationChecks = NativeMethods.WTD_REVOKE_NONE,
+                dwUnionChoice = NativeMethods.WTD_CHOICE_FILE,
+                psFileOrBlob = fileInfoPtr,
+                dwStateAction = NativeMethods.WTD_STATEACTION_IGNORE,
+                hWVTStateData = IntPtr.Zero,
+                pwszURLReference = IntPtr.Zero,
+                dwProvFlags = NativeMethods.WTD_SAFER_FLAG,
+                dwUIContext = 0,
+                pSignatureSettings = IntPtr.Zero
+            };
+
+            try
+            {
+                // Step 1: verify
+                trustData.dwStateAction = NativeMethods.WTD_STATEACTION_VERIFY;
+                uint result = NativeMethods.WinVerifyTrust(
+                    IntPtr.Zero, NativeMethods.WINTRUST_ACTION_GENERIC_VERIFY_V2, ref trustData);
+
+                // Step 2: close state (required even on failure)
+                trustData.dwStateAction = NativeMethods.WTD_STATEACTION_CLOSE;
+                NativeMethods.WinVerifyTrust(
+                    IntPtr.Zero, NativeMethods.WINTRUST_ACTION_GENERIC_VERIFY_V2, ref trustData);
+
+                return result == 0; // TRUST_E_SUBJECT_NOT_TRUSTED or any error → false
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(fileInfo.pcwszFilePath);
+                Marshal.FreeHGlobal(fileInfoPtr);
+                // If state was allocated, free it
+                if (trustData.hWVTStateData != IntPtr.Zero)
+                {
+                    trustData.dwStateAction = NativeMethods.WTD_STATEACTION_CLOSE;
+                    NativeMethods.WinVerifyTrust(
+                        IntPtr.Zero, NativeMethods.WINTRUST_ACTION_GENERIC_VERIFY_V2, ref trustData);
+                }
+            }
+        }
+        catch { return false; }
+    }
+
+    private class BlacklistCacheEntry
+    {
+        public string FileName { get; set; } = "";
+        public string Sha256 { get; set; } = "";
+        public long LastWriteTimeUtc { get; set; }
+    }
+
+    // ==================== IOCP 回调 ====================
+
     /// <summary>IOCP 回调：处理进程退出 Job 的消息。（当前仅用于资源清理，不需要额外处理）</summary>
     private void HandleNewProcessExit(uint pid)
     {
@@ -585,21 +805,57 @@ public class WindowsGameProcessSecurityService : IGameProcessSecurityService
         try
         {
             string? procName;
+            string? procMainModuleFile;
             try
             {
                 using var proc = Process.GetProcessById((int)pid);
                 procName = (proc.ProcessName ?? "") + ".exe";
+                // 进程刚创建时 MainModule 可能尚未就绪；异常 → 回退到仅文件名匹配
+                procMainModuleFile = null;
+                try { procMainModuleFile = proc.MainModule?.FileName; } catch { /* 快照失败，继续 */ }
             }
             catch { return; } // 进程已退出
 
-            if (!Blocklist.Contains(Path.GetFileName(procName)))
+            // ── 通道 1: 文件名快反 ──
+            if (Blocklist.Contains(Path.GetFileName(procName)))
+            {
+                try { Process.GetProcessById((int)pid)?.Kill(); } catch { }
+                string? commandLine = GetProcessCommandLine((int)pid);
+                _onThreat?.Invoke(procName, (int)pid, commandLine);
                 return;
+            }
 
-            // 立即杀子进程
-            try { Process.GetProcessById((int)pid)?.Kill(); } catch { }
+            // ── 通道 2: 哈希比对 + Authenticode 签名（反制改名/复制/改字节绕过） ──
+            if (!string.IsNullOrEmpty(procMainModuleFile) && _hashCache.Count > 0)
+            {
+                string ext = Path.GetExtension(procName);
+                bool isPE = ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                         || ext.Equals(".scr", StringComparison.OrdinalIgnoreCase);
+                if (!isPE) return; // 非 PE 不检查
 
-            string? commandLine = GetProcessCommandLine((int)pid);
-            _onThreat?.Invoke(procName, (int)pid, commandLine);
+                string? suspectHash = ComputeSha256(procMainModuleFile);
+                if (!string.IsNullOrEmpty(suspectHash))
+                {
+                    // 哈希命中 → 该进程是某个黑名单文件的副本 → kill
+                    foreach (var kv in _hashCache)
+                    {
+                        if (string.Equals(kv.Value, suspectHash, StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { Process.GetProcessById((int)pid)?.Kill(); } catch { }
+                            string? commandLine = GetProcessCommandLine((int)pid);
+                            _onThreat?.Invoke($"{procName} (改名绕过 → 原始: {kv.Key})", (int)pid, commandLine);
+                            return;
+                        }
+                    }
+                    // 哈希未命中 → 检查 Authenticode 签名
+                    if (!IsMicrosoftSigned(procMainModuleFile))
+                    {
+                        try { Process.GetProcessById((int)pid)?.Kill(); } catch { }
+                        string? commandLine = GetProcessCommandLine((int)pid);
+                        _onThreat?.Invoke($"{procName} (无签名可执行文件)", (int)pid, commandLine);
+                    }
+                }
+            }
         }
         catch { }
     }

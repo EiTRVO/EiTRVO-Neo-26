@@ -360,6 +360,10 @@ namespace EiTRVO.UI
                     case nameof(SettingsViewModel.FirewallEnabled):
                         _settings.FirewallEnabled = _settingsVm.FirewallEnabled;
                         SaveSettingsFromVm();
+                        if (_settingsVm.FirewallEnabled)
+                            _gameSecurity.InitializeBlacklistHashes();
+                        else
+                            _gameSecurity.DeleteBlacklistHashCache();
                         break;
                     case nameof(SettingsViewModel.AdvancedDefenseEnabled):
                         _settings.AdvancedDefenseEnabled = _settingsVm.AdvancedDefenseEnabled;
@@ -576,6 +580,13 @@ namespace EiTRVO.UI
             }
 
             ApplySettings();
+
+            // Firewall 黑名单哈希预缓存：启动时预先计算，避免游戏启动时 I/O
+            // Firewall 关闭时清理残留缓存，防止启用后被过时数据污染
+            if (_settings.FirewallEnabled)
+                _gameSecurity.InitializeBlacklistHashes();
+            else
+                _gameSecurity.DeleteBlacklistHashCache();
 
             // 清理上次异常中断的备份/恢复残留
             CleanupFailedOperations();

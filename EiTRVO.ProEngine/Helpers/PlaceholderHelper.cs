@@ -42,7 +42,7 @@ public static class PlaceholderHelper
             .Replace("${assets_index_name}", assetIndex)
             .Replace("${version_type}", versionType)
             .Replace("${auth_uuid}", uuid)
-            .Replace("${auth_access_token}", accessToken)
+            .Replace("${auth_access_token}", string.IsNullOrEmpty(accessToken) ? "0" : accessToken)
             .Replace("${clientid}", "5a0b94a6-2810-4a43-a722-ba15271955b4")
             .Replace("${auth_xuid}", "0")
             .Replace("${user_type}", "msa")

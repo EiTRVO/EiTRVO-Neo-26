@@ -18,8 +18,18 @@ public partial class SettingsViewModel : BaseViewModel
     private readonly IWindowsHelloService _windowsHello;
     private readonly IModrinthService _modrinth;
 
+    private const int SliderMinMB = 2048; // 2 GB
+
+    /// <summary>初始化默认值：对齐到第 2 节点（SliderMinMB + 1 × TickFrequency）。</summary>
+    private static int ComputeDefaultNodeMB()
+    {
+        int range = SystemMemoryInfo.SliderMaxMemoryMB - SliderMinMB;
+        int freq = Math.Max(512, (int)Math.Round(range / 7.0 / 512.0) * 512);
+        return SliderMinMB + freq;
+    }
+
     [ObservableProperty]
-    private int _memory = SystemMemoryInfo.RecommendedDefaultMemoryMB;
+    private int _memory = ComputeDefaultNodeMB();
 
     [ObservableProperty]
     private string? _selectedResolution;
@@ -28,23 +38,44 @@ public partial class SettingsViewModel : BaseViewModel
     private JavaInfo? _selectedJava;
 
     [ObservableProperty]
-    private string _memoryText = SystemMemoryInfo.RecommendedDefaultMemoryMB.ToString();
+    private string _memoryText = (ComputeDefaultNodeMB() / 1024.0).ToString("F1");
 
     // === 动态内存上限（系统内存感知）===
 
-    /// <summary>滑块最大值 = 总内存的 70%。</summary>
-    public int MaxMemoryMB => SystemMemoryInfo.RecommendedMaxMemoryMB;
+    /// <summary>滑块最大值 = 软上限 16 GB 内 70% RAM。</summary>
+    public int MaxMemoryMB => SystemMemoryInfo.SliderMaxMemoryMB;
+
+    /// <summary>滑块最小值（GB 显示用）。</summary>
+    public double SliderMinGB => SliderMinMB / 1024.0;
+
+    /// <summary>滑块最大值（GB 显示用）。</summary>
+    public double SliderMaxGB => MaxMemoryMB / 1024.0;
 
     /// <summary>推荐默认内存 = 总内存的 20%（2-8 GB 保底封顶）。</summary>
     public int RecommendedMemoryMB => SystemMemoryInfo.RecommendedDefaultMemoryMB;
 
-    /// <summary>当前内存值所在区间的步长（用于刻度间距），始终均分为 8 格。</summary>
+    /// <summary>当前内存值（GB），与 Memory (MB) 双向同步。</summary>
+    public double MemoryGB
+    {
+        get => Memory / 1024.0;
+        set
+        {
+            int mb = Math.Clamp((int)Math.Round(value * 1024.0), SliderMinMB, MaxMemoryMB);
+            if (mb != Memory)
+                Memory = mb;
+        }
+    }
+
+    /// <summary>第二节点对应的 MB 值（默认按钮目标）。</summary>
+    public int DefaultNodeMB => SliderMinMB + CurrentTickFrequency;
+
+    /// <summary>8 等分刻线间距（MB），范围从 2 GB 到软上限。</summary>
     public int CurrentTickFrequency
     {
         get
         {
-            int range = MaxMemoryMB - 256;
-            return Math.Max(128, (int)Math.Round(range / 7.0 / 128.0) * 128);
+            int range = MaxMemoryMB - SliderMinMB;
+            return Math.Max(512, (int)Math.Round(range / 7.0 / 512.0) * 512);
         }
     }
 
@@ -193,7 +224,24 @@ public partial class SettingsViewModel : BaseViewModel
 
     partial void OnMemoryChanged(int value)
     {
-        MemoryText = value.ToString();
+        MemoryText = (value / 1024.0).ToString("F1");
+        OnPropertyChanged(nameof(MemoryGB));
+    }
+
+    /// <summary>手输框解析：兼容 GB 输入（如 "4" 或 "4.0"）。</summary>
+    partial void OnMemoryTextChanged(string value)
+    {
+        if (double.TryParse(value, out double gb))
+        {
+            int mb = Math.Clamp((int)Math.Round(gb * 1024.0), SliderMinMB, MaxMemoryMB);
+            Memory = mb;
+        }
+    }
+
+    [RelayCommand]
+    private void ResetMemoryToDefault()
+    {
+        Memory = DefaultNodeMB;
     }
 
     partial void OnBackupEnabledChanged(bool value)
@@ -216,16 +264,11 @@ public partial class SettingsViewModel : BaseViewModel
         OnPropertyChanged(nameof(HasRestoreFile));
     }
 
-    partial void OnMemoryTextChanged(string value)
-    {
-        if (int.TryParse(value, out int val))
-            Memory = Math.Clamp(val, 256, MaxMemoryMB);
-    }
 
     /// <summary>Apply stored settings to the ViewModel properties.</summary>
     public void ApplySettings(LauncherSettings settings)
     {
-        Memory = settings.MemoryMB > 0 ? settings.MemoryMB : SystemMemoryInfo.RecommendedDefaultMemoryMB;
+        Memory = settings.MemoryMB > 0 ? settings.MemoryMB : DefaultNodeMB;
         SelectedResolution = settings.Resolution;
         UseAutoDetectJava = settings.UseAutoDetectJava;
         ManualJavaPath = settings.ManualJavaPath;

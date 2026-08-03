@@ -10,7 +10,7 @@
                                    FontWeight="Bold" Margin="0,0,0,12"
                                    Foreground="{DynamicResource TextPrimary}"/>
 
-                        <GroupBox Header="启动内存 (MB)" Padding="12"
+                        <GroupBox Header="启动内存 (GB)" Padding="12"
                                   Margin="0,4">
                             <StackPanel>
                                 <!-- 系统信息提示 -->
@@ -19,15 +19,19 @@
                                            Foreground="{DynamicResource TextSecondary}"
                                            TextWrapping="Wrap"/>
 
-                                <!-- 滑块 + 输入框 -->
+                                <!-- 滑块 + 输入框 + 默认按钮 -->
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
 
                                     <!-- 带刻度滑块（8 格均分） -->
-                                    <Slider x:Name="sliderMemory" Minimum="256"
+                                    <Slider x:Name="sliderMemory" Minimum="2048"
                                             Maximum="{Binding MaxMemoryMB}"
                                             TickFrequency="{Binding CurrentTickFrequency}"
                                             IsSnapToTickEnabled="True"
@@ -42,18 +46,29 @@
                                     </Slider>
 
                                     <!-- 输入区域 -->
-                                    <StackPanel Grid.Column="1"
+                                    <StackPanel Grid.Column="1" Grid.RowSpan="2"
                                                 Orientation="Horizontal"
                                                 Margin="10,0,0,0"
                                                 VerticalAlignment="Center">
-                                        <TextBox x:Name="txtMemory" Width="60"
+                                        <TextBox x:Name="txtMemory" Width="50"
                                                  Height="28"
                                                  Text="{Binding MemoryText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
-                                        <TextBlock Text=" MB"
+                                        <TextBlock Text=" GB"
                                                    VerticalAlignment="Center"
                                                    Margin="5,0,0,0"
                                                    Foreground="{DynamicResource TextSecondary}"/>
                                     </StackPanel>
+
+                                    <!-- 默认按钮 -->
+                                    <Button Grid.Row="1"
+                                            Content="默认"
+                                            Style="{StaticResource CardBtn}"
+                                            Height="24" Padding="8,2"
+                                            FontSize="11"
+                                            Foreground="{DynamicResource AccentBlue}"
+                                            Margin="0,4,0,0"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding ResetMemoryToDefaultCommand}"/>
                                 </Grid>
                             </StackPanel>
                         </GroupBox>

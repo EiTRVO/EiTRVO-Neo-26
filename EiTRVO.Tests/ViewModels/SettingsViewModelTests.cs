@@ -64,7 +64,7 @@ public class SettingsViewModelTests
     public void ToSettings_SnapshotsCurrentState()
     {
         var vm = new SettingsViewModel(_javaDetection, _notification, _dialog, _windowsHello, _modrinth);
-        vm.MemoryText = "4096";
+        vm.MemoryText = "4.0";
         vm.BackupEnabled = true;
         vm.FirewallEnabled = false;
         vm.IsolateNewInstancesByDefault = false;
