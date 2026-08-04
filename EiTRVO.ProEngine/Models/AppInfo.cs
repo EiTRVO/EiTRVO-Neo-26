@@ -7,7 +7,7 @@ namespace EiTRVO.ProEngine.Models;
 public static class AppInfo
 {
     public const string Title = "EiTRVO Neo";
-    public const string Version = "26.1.1008.5";
+    public const string Version = "26.1.1008.6";
     public const string VersionShort = "26.1";
     public const string ProEngineVersion = "M1(1008)";
     public const string BuildDate = "2026年8月";

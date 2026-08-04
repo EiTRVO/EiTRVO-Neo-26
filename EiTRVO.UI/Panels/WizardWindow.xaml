@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:panels="clr-namespace:EiTRVO.UI.Panels"
         Title="EiTRVO Neo — 首次启动向导"
-        Height="600" Width="920"
-        MinWidth="800" MinHeight="520"
+        Height="570" Width="860"
+        MinWidth="740" MinHeight="500"
         FontFamily="{StaticResource CustomFont}"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBg}">

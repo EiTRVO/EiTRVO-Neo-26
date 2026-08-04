@@ -504,6 +504,7 @@ public class LaunchOrchestrator
         args.Add($"-Djava.library.path={nativePath}");
         args.Add("-Dminecraft.launcher.brand=eitrvo-neo");
         args.Add("-Dminecraft.launcher.version=26");
+        args.Add("-Dlog4j2.formatMsgNoLookups=true");
 
         if (targetJava != 8)
         {

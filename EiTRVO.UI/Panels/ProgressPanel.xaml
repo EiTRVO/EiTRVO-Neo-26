@@ -250,6 +250,7 @@
                             <!-- 日志内容区 -->
                             <ScrollViewer Grid.Row="2" x:Name="runtimeLogScroller"
                                           VerticalScrollBarVisibility="Visible"
+                                          HorizontalScrollBarVisibility="Auto"
                                           Margin="0,6,0,0">
                                 <ItemsControl ItemsSource="{Binding GameLogEntries}">
                                     <ItemsControl.ItemTemplate>
